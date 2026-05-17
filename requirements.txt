@@ -1,0 +1,6 @@
+telethon
+psutil
+pytz
+persiantools
+requests
+asyncio
