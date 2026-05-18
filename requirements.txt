@@ -1,6 +1,11 @@
 telethon
+python-telegram-bot
 psutil
 pytz
 persiantools
 requests
-asyncio
+jdatetime
+hijri-date
+deep-translator
+flask
+waitress
