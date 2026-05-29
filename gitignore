@@ -1,0 +1,12 @@
+*.session
+*.session-journal
+__pycache__/
+*.pyc
+user_sessions/
+session_backups/
+media_storage/
+reported_media/
+main_database.db
+*.db
+*.db-journal
+.env
