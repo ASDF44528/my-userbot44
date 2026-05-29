@@ -7,8 +7,11 @@ import re
 import time
 import requests
 import random
-import threading
 import uuid
+import shutil
+import zipfile
+import aiohttp
+import threading
 from datetime import datetime, timedelta
 from urllib.parse import quote
 import pytz
@@ -100,8 +103,11 @@ BOT_USERNAME = "Gap_5_bot"
 
 # ========== پوشه سشن‌ها ==========
 SESSIONS_FOLDER = 'user_sessions'
+BACKUP_FOLDER = 'session_backups'
 if not os.path.exists(SESSIONS_FOLDER):
     os.makedirs(SESSIONS_FOLDER)
+if not os.path.exists(BACKUP_FOLDER):
+    os.makedirs(BACKUP_FOLDER)
 
 # ========== تنظیمات سلف‌بات ==========
 GROUP_ID = -1002817019483
@@ -144,7 +150,7 @@ classic_fonts = [
     "⁰¹²³⁴⁵⁶⁷⁸⁹",
     "𝟶𝟷𝟸𝟹𝟺𝟻𝟼𝟽𝟾𝟿",
     "₀¹²³⁴⁵⁶₇₈₉",
-        "𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗",
+    "𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗",
     "𝟘𝟙𝟚𝟛𝟜𝟝𝟞𝟟𝟠𝟡",
     "０１２３４５６７８９",
     "₀₁₂₃₄₅₆₇₈₉",
@@ -159,13 +165,13 @@ classic_fonts = [
     "𝟶𝟷𝟸𝟹𝟺𝟻𝟼𝟽𝟾𝟿",
     "𝟬𝟭𝟮𝟯𝟰𝟱𝟲𝟳𝟴𝟵",
     "𝟢𝟣𝟤𝟥𝟦𝟧𝟨𝟩𝟪𝟫",
-    "０１２３４۵６７۸۹",
+    "０１２３４５６７８۹",
     "𝟘𝟙𝟚𝟛𝟜𝟝𝟞𝟟𝟠𝟡",
     "𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗",
     "𝟶𝟷𝟸𝟹𝟺𝟻𝟼𝟽𝟾𝟿",
     "𝟬𝟭𝟮𝟯𝟰𝟱𝟲𝟳𝟴𝟵",
     {'0': '0', '1': '1', '2': '2', '3': '3', '4': '4', '5': '5', '6': '6', '7': '7', '8': '8', '9': '9', ':': ':'},
-    {'0': '𝟎', '1': '𝟏', '2': '𝟐', '3': '𝟃', '4': '𝟄', '5': '𝟅', '6': '𝟆', '7': '𝟇', '8': '𝟈', '9': '𝟉', ':': ':'},
+    {'0': '𝟎', '1': '𝟏', '2': '𝟐', '3': '𝟑', '4': '𝟒', '5': '𝟓', '6': '𝟔', '7': '𝟕', '8': '𝟖', '9': '𝟗', ':': ':'},
     {'0': '𝟶', '1': '𝟷', '2': '𝟸', '3': '𝟹', '4': '𝟺', '5': '𝟻', '6': '𝟼', '7': '𝟽', '8': '𝟾', '9': '𝟿', ':': ':'},
     {'0': '⓪', '1': '①', '2': '②', '3': '③', '4': '④', '5': '⑤', '6': '⑥', '7': '⑦', '8': '⑧', '9': '⑨', ':': ':'},
     {'0': '🄋', '1': '➊', '2': '➋', '3': '➌', '4': '➍', '5': '➎', '6': '➏', '7': '➐', '8': '➑', '9': '➒', ':': ':'},
@@ -198,7 +204,7 @@ SPAM_MESSAGES = [
     "عمه‌ت کس‌کش، کسشو تو حموم عمومی به همه نشون می‌ده",
     "خاله‌ت کونی، کیر هر غریبه‌ای رو تو کوچه می‌گیره",
     "جدت کسده، تو گور هم کسشو به فرشته‌ها اجاره می‌ده",
-      "یا الله کیرم به قلب مادرت",
+    "یا الله کیرم به قلب مادرت",
     "مادرتو میدم سگ بگاد",
     "با کیرم ناموستو پاره میکنم",
     "کیرمو حلقه میکنم دور گردن مادرت",
@@ -236,7 +242,7 @@ SPAM_MESSAGES = [
     "یخچال تو کسمادرت",
     "کیرم به پوزه مادرت",
     "مادرتو زدم به سیخ",
-   "کسمادرت","کیر شتر تو ناموست","نودا ننت فروشی","خایه با پرزش تو ننت","چشای ننت تو کون خارت بره","ننتو ریدم","لال شو مادرجنده اوبنه ای","اوب از کون ننت میباره","ماهی تو کسمادرت","کیر هرچی خره تو کسمادرت","کیر رونالدو به کس خار و مادرت","مادرت زیر کیرم شهید شد","اسپنک زدم به کون مادر جندت","کیرم یهویی به مردع و زندت","کیر به فیس ننت","برو مادرجنده بی غیرت","استخون های مرده هات تو کسمادرت","اسپرمم تو نوامیست","مادرتو با پوزیشن های مختلف گاییدم","میز و صندلی تو کسمادرت","کیر به ناموس دلقکت","دمپایی تو کون ننت","دماغ پینوکیو رو گذاشتم جلو کص مادرت و بهش گفتم که بگه مادرت جنده نیست تا با دراز شدن دماغش کص مادرت پاره بشه","مادر فلش شده جوری با کیر میزنم ب فرق سر ننت ک حافظش بپره","كيرم شيك تو كس ننت","مادرتو کردم تو بشکه نفت از بالا کوه قل دادم پایین","با کیرم مادرتو هیپنوتیزم کردم","ناموستو تو کوچه موقع عید دیدنی دیدم رفتم خونه به یادش جق زدم","با خیسی عرق کون مادرت جقیدم","با سرعت نور تو فضا حرکت میکنم تا پیر نشم و بزارم آبجی کوچیکت بزرگ بشه تا وقتی بزرگ شد باهاش سکس کنم","مادرتو پودر میکنم ازش سنگ توالت میسازم هر روز صبح رو مادرت میرینم","مادرتو مجبور میکنم خودکشی کوانتومی کنه تا در بی نهایت جهان موازی یتیم بشی","دیدی چه لگدی به مادرت زدم ؟","فرشی که مادرت روش کونشو گذاشته بو کردم","مادرتو جوری گاییدم که همسایه ها فکر کردن اسب ترکمن اومده خونتون"
+    "کسمادرت","کیر شتر تو ناموست","نودا ننت فروشی","خایه با پرزش تو ننت","چشای ننت تو کون خارت بره","ننتو ریدم","لال شو مادرجنده اوبنه ای","اوب از کون ننت میباره","ماهی تو کسمادرت","کیر هرچی خره تو کسمادرت","کیر رونالدو به کس خار و مادرت","مادرت زیر کیرم شهید شد","اسپنک زدم به کون مادر جندت","کیرم یهویی به مردع و زندت","کیر به فیس ننت","برو مادرجنده بی غیرت","استخون های مرده هات تو کسمادرت","اسپرمم تو نوامیست","مادرتو با پوزیشن های مختلف گاییدم","میز و صندلی تو کسمادرت","کیر به ناموس دلقکت","دمپایی تو کون ننت","دماغ پینوکیو رو گذاشتم جلو کص مادرت و بهش گفتم که بگه مادرت جنده نیست تا با دراز شدن دماغش کص مادرت پاره بشه","مادر فلش شده جوری با کیر میزنم ب فرق سر ننت ک حافظش بپره","كيرم شيك تو كس ننت","مادرتو کردم تو بشکه نفت از بالا کوه قل دادم پایین","با کیرم مادرتو هیپنوتیزم کردم","ناموستو تو کوچه موقع عید دیدنی دیدم رفتم خونه به یادش جق زدم","با خیسی عرق کون مادرت جقیدم","با سرعت نور تو فضا حرکت میکنم تا پیر نشم و بزارم آبجی کوچیکت بزرگ بشه تا وقتی بزرگ شد باهاش سکس کنم","مادرتو پودر میکنم ازش سنگ توالت میسازم هر روز صبح رو مادرت میرینم","مادرتو مجبور میکنم خودکشی کوانتومی کنه تا در بی نهایت جهان موازی یتیم بشی","دیدی چه لگدی به مادرت زدم ؟","فرشی که مادرت روش کونشو گذاشته بو کردم","مادرتو جوری گاییدم که همسایه ها فکر کردن اسب ترکمن اومده خونتون"
 ]
 
 # ========== تنظیمات پیش‌فرض قفل رسانه ==========
@@ -304,6 +310,70 @@ def create_heart_matrix(size):
 HEART_MATRIX_SIZES = [3, 5, 7, 9, 11, 13]
 JOINED_HEART = create_heart_matrix(7)
 HEARTLET_LEN = JOINED_HEART.count(R)
+
+# ========== توابع کمکی ==========
+async def self_ping():
+    """هر 30 ثانیه یکبار به خودش پینگ میزنه تا Render نخوابه"""
+    while True:
+        try:
+            port = int(os.environ.get("PORT", 10000))
+            async with aiohttp.ClientSession() as session:
+                await session.get(f"http://0.0.0.0:{port}/health")
+                logger.info("🔄 Self-ping sent to keep bot alive")
+        except Exception as e:
+            logger.error(f"❌ Self-ping error: {e}")
+        await asyncio.sleep(30)
+
+async def backup_session_files():
+    """هر 15 دقیقه از فایل‌های سشن بکاپ می‌گیره"""
+    while True:
+        try:
+            if os.path.exists(SESSIONS_FOLDER):
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                backup_file = os.path.join(BACKUP_FOLDER, f"session_{timestamp}.zip")
+                
+                with zipfile.ZipFile(backup_file, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    for root, dirs, files in os.walk(SESSIONS_FOLDER):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.relpath(file_path, SESSIONS_FOLDER)
+                            zipf.write(file_path, arcname)
+                
+                backups = sorted([f for f in os.listdir(BACKUP_FOLDER) if f.endswith('.zip')])
+                for old_backup in backups[:-10]:
+                    os.remove(os.path.join(BACKUP_FOLDER, old_backup))
+                
+                logger.info(f"✅ Session backup saved: {backup_file}")
+        except Exception as e:
+            logger.error(f"❌ Backup error: {e}")
+        
+        await asyncio.sleep(900)
+
+async def restore_latest_session():
+    """آخرین بکاپ موجود رو بازیابی می‌کنه"""
+    if not os.path.exists(BACKUP_FOLDER):
+        return False
+    
+    backups = sorted([f for f in os.listdir(BACKUP_FOLDER) if f.endswith('.zip')])
+    if not backups:
+        return False
+    
+    latest_backup = backups[-1]
+    backup_path = os.path.join(BACKUP_FOLDER, latest_backup)
+    
+    try:
+        if os.path.exists(SESSIONS_FOLDER):
+            shutil.rmtree(SESSIONS_FOLDER)
+        os.makedirs(SESSIONS_FOLDER)
+        
+        with zipfile.ZipFile(backup_path, 'r') as zipf:
+            zipf.extractall(SESSIONS_FOLDER)
+        
+        logger.info(f"✅ Session restored from: {latest_backup}")
+        return True
+    except Exception as e:
+        logger.error(f"❌ Restore error: {e}")
+        return False
 
 # ========== کلاس مدیریت تنظیمات گزارش ==========
 class ReportConfig:
@@ -700,7 +770,6 @@ class MainDatabase:
                 'active': bool(settings.get('auto_reply_active', 0)),
                 'text': settings.get('auto_reply_text', '')
             }
-            # دریافت ایندکس‌های فونت برای تایم
             time_font_indices = settings.get('time_font_indices', 'all')
             if time_font_indices and time_font_indices != 'all':
                 try:
@@ -765,7 +834,6 @@ class MainDatabase:
         settings_to_save.pop('translate', None)
         settings_to_save.pop('auto_reply', None)
         
-        # تبدیل لیست ایندکس‌های فونت به رشته
         if 'time_font_indices' in settings_to_save and isinstance(settings_to_save['time_font_indices'], list):
             settings_to_save['time_font_indices'] = ','.join(map(str, settings_to_save['time_font_indices']))
         
@@ -1224,11 +1292,12 @@ class MainDatabase:
         conn.close()
         return result[0] if result else None
 
-# ========== ایجاد دیتابیس ==========
+# ========== ادامه از قسمت قبل ==========
+
 db = MainDatabase()
 selfbot_managers = {}
 
-# ========== توابع کمکی اصلاح شده ==========
+# ========== توابع کمکی ==========
 def convert_persian_to_english(text):
     if not text:
         return text
@@ -1273,7 +1342,6 @@ def get_full_date_info():
         return f"📅 **تاریخ:** {now.strftime('%Y/%m/%d %H:%M:%S')}"
 
 def is_channel_post(message):
-    """تشخیص پست کانال - نسخه اصلاح شده و تضمینی"""
     try:
         if not message:
             return False
@@ -1448,14 +1516,12 @@ def extract_name_from_message(text):
 
 # ========== توابع انیمیشن قلب پیشرفته ==========
 async def _wrap_edit(message, text: str):
-    """Floodwait-safe utility wrapper for edit"""
     try:
         await message.edit(text)
     except FloodWaitError as fl:
         await asyncio.sleep(fl.seconds)
 
 async def advanced_heart_phase1(message):
-    """مرحله 1: اسکرول بزرگ قلب"""
     BIG_SCROLL = "🧡💛💚💙💜🖤🤎"
     await _wrap_edit(message, JOINED_HEART)
     for heart in BIG_SCROLL:
@@ -1463,7 +1529,6 @@ async def advanced_heart_phase1(message):
         await asyncio.sleep(SLEEP)
 
 async def advanced_heart_phase2(message):
-    """مرحله 2: تصادفی کردن قلب‌ها"""
     ALL = ["❤️"] + list("🧡💛💚💙💜🤎🖤")
     format_heart = JOINED_HEART.replace(R, "{}")
     for _ in range(5):
@@ -1472,7 +1537,6 @@ async def advanced_heart_phase2(message):
         await asyncio.sleep(SLEEP)
 
 async def advanced_heart_phase3(message):
-    """مرحله 3: پر کردن ماتریس قلب"""
     await _wrap_edit(message, JOINED_HEART)
     await asyncio.sleep(SLEEP * 2)
     repl = JOINED_HEART
@@ -1482,14 +1546,12 @@ async def advanced_heart_phase3(message):
         await asyncio.sleep(SLEEP)
 
 async def advanced_heart_phase4(message):
-    """مرحله 4: کوچک شدن ماتریس"""
     for i in range(7, 0, -1):
         heart_matrix = "\n".join([R * i] * i)
         await _wrap_edit(message, heart_matrix)
         await asyncio.sleep(SLEEP)
 
 async def advanced_heart_animation(message):
-    """انیمیشن قلب پیشرفته کامل"""
     await advanced_heart_phase1(message)
     await asyncio.sleep(SLEEP * 3)
     await advanced_heart_phase2(message)
@@ -1506,7 +1568,7 @@ async def advanced_heart_animation(message):
     await asyncio.sleep(3)
     await message.edit("❤️ I Love You <3")
 
-# ========== کلاس مدیریت سلف‌بات (نسخه نهایی و پایدار) ==========
+# ========== کلاس مدیریت سلف‌بات ==========
 class SelfBotManager:
     def __init__(self, user_id):
         self.user_id = int(user_id)
@@ -2116,7 +2178,6 @@ class SelfBotManager:
             return False
     
     async def handle_media_lock_delete(self, event, message_text):
-        """بررسی و حذف پیام در صورت قفل بودن رسانه"""
         if not event.message or event.message.out:
             return False
         
@@ -2126,7 +2187,6 @@ class SelfBotManager:
         
         media_locks = db.get_media_locks(self.user_id, target_id)
         
-        # قفل لینک
         if media_locks.get('lock_link') and is_link_message(message_text):
             try:
                 await event.message.delete()
@@ -2135,7 +2195,6 @@ class SelfBotManager:
             except:
                 pass
         
-        # قفل ایموجی معمولی
         if media_locks.get('lock_emoji') and is_emoji_message(message_text):
             try:
                 await event.message.delete()
@@ -2163,7 +2222,6 @@ class SelfBotManager:
         else:
             return
         
-        # قفل پیوی همه
         if isinstance(event.message.peer_id, PeerUser) and not event.message.out:
             if settings.get('pv_lock_all'):
                 try:
@@ -2173,7 +2231,6 @@ class SelfBotManager:
                 except:
                     pass
         
-        # قفل پیوی اختصاصی
         if isinstance(event.message.peer_id, PeerUser) and not event.message.out:
             if db.is_pv_locked(self.user_id, event.sender_id):
                 try:
@@ -2183,12 +2240,10 @@ class SelfBotManager:
                 except:
                     pass
         
-        # قفل رسانه‌ها
         if event.message.text:
             if await self.handle_media_lock_delete(event, event.message.text):
                 return
         
-        # قفل عکس
         if event.message.photo and isinstance(event.message.media, MessageMediaPhoto):
             target_id = event.sender_id
             media_locks = db.get_media_locks(self.user_id, target_id)
@@ -2200,7 +2255,6 @@ class SelfBotManager:
                 except:
                     pass
         
-        # قفل ویدیو
         if event.message.video:
             target_id = event.sender_id
             media_locks = db.get_media_locks(self.user_id, target_id)
@@ -2212,7 +2266,6 @@ class SelfBotManager:
                 except:
                     pass
         
-        # قفل استیکر
         if event.message.sticker:
             target_id = event.sender_id
             media_locks = db.get_media_locks(self.user_id, target_id)
@@ -2224,7 +2277,6 @@ class SelfBotManager:
                 except:
                     pass
         
-        # قفل گیف
         if event.message.gif:
             target_id = event.sender_id
             media_locks = db.get_media_locks(self.user_id, target_id)
@@ -2236,7 +2288,6 @@ class SelfBotManager:
                 except:
                     pass
         
-        # قفل ایموجی پرمیوم
         if await is_premium_emoji(event.message):
             target_id = event.sender_id
             media_locks = db.get_media_locks(self.user_id, target_id)
@@ -2248,11 +2299,9 @@ class SelfBotManager:
                 except:
                     pass
         
-        # ذخیره پیام در کش
         if isinstance(event.message.peer_id, PeerUser) and not event.message.out and event.message.text:
             db.cache_message(self.user_id, chat_id, event.message.id, event.message.text)
         
-        # ========== پاسخ خودکار ==========
         if isinstance(event.message.peer_id, PeerUser) and not event.message.out:
             sender_id = event.sender_id
             
@@ -2266,7 +2315,6 @@ class SelfBotManager:
                 except Exception as e:
                     logger.error(f"خطا در ارسال پاسخ خودکار: {e}")
         
-        # ========== ریکت خودکار ==========
         if isinstance(event.message.peer_id, PeerUser) and not event.message.out:
             sender_id = event.sender_id
             try:
@@ -2284,17 +2332,13 @@ class SelfBotManager:
             except Exception as e:
                 logger.error(f"خطا در دریافت ریکت: {e}")
         
-        # ========== هوش مصنوعی (مستقل برای هر کاربر) ==========
         if isinstance(event.message.peer_id, PeerUser) and not event.message.out:
             sender_id = event.sender_id
             
-            # تشخیص اینکه کاربر در پی‌وی به بات پیام داده
-            # و بررسی تنظیمات هوش مصنوعی خود کاربر (نه ارسال‌کننده)
             ai_status = settings.get('ai_status', {})
             ai_active = False
             ai_type = None
             
-            # فقط پیام‌های متنی را پردازش کن
             if event.message.text:
                 if ai_status.get('ai_1_pm'):
                     ai_active = True
@@ -2308,14 +2352,11 @@ class SelfBotManager:
             
             if ai_active and ai_type:
                 try:
-                    # ارسال اکشن تایپ
                     await self.client(SetTypingRequest(event.chat_id, types.SendMessageTypingAction()))
                     
-                    # دریافت پاسخ از هوش مصنوعی
                     response = await get_ai_response(event.message.text, ai_type, self.user_id)
                     
                     if response:
-                        # اعمال استایل متن
                         text, entities = await apply_text_style(response, settings.get('text_style'))
                         await event.reply(text, formatting_entities=entities)
                         logger.info(f"✅ پاسخ هوش مصنوعی {ai_type} به کاربر {sender_id} ارسال شد")
@@ -2324,7 +2365,6 @@ class SelfBotManager:
                 except Exception as e:
                     logger.error(f"خطا در پاسخ هوش مصنوعی: {e}")
         
-        # ذخیره اطلاعات کاربر
         if isinstance(event.message.peer_id, PeerUser) and not event.message.out:
             sender_id = event.sender_id
             try:
@@ -2609,7 +2649,6 @@ class SelfBotManager:
         elif isinstance(event.message.peer_id, PeerChat):
             chat_id = event.message.peer_id.chat_id
         
-        # ========== دستور تایم با فونت دلخواه ==========
         match = re.match(r'^تایم\s+([\d\.]+)$', command_text)
         if match:
             indices_str = match.group(1)
@@ -2630,7 +2669,6 @@ class SelfBotManager:
                 await event.edit(f"❌ ایندکس نامعتبر. محدوده مجاز: 0 تا {len(classic_fonts)-1}")
             return
         
-        # ========== دستورات پاسخ خودکار ==========
         if command_text.startswith('پاسخ '):
             reply_text = command_text[5:].strip()
             if reply_text:
@@ -2652,7 +2690,6 @@ class SelfBotManager:
             await event.edit("❌ پاسخ خودکار غیرفعال شد")
             return
         
-        # ========== کپی و چسباندن ==========
         if command_text.startswith('کپی @'):
             parts = command_text.split()
             if len(parts) >= 2:
@@ -2710,7 +2747,6 @@ class SelfBotManager:
                 await event.edit(f"❌ خطا: {str(e)}")
             return
         
-        # ========== دستورات انیمیشن جدید ==========
         if command_text == 'قلب پیشرفته':
             await event.delete()
             try:
@@ -3973,10 +4009,6 @@ class SelfBotManager:
         try:
             command_text = event.text.lower()
             
-            # بدون نیاز به ریپلای - قفل برای همه کاربران پیوی فعال می‌شود
-            # اگر کاربر روی پیام خاصی ریپلای کرد فقط برای آن کاربر قفل فعال می‌شود
-            # اگر ریپلای نکرد برای همه کاربران قفل فعال می‌شود
-            
             lock_type = None
             if 'لینک' in command_text:
                 lock_type = 'lock_link'
@@ -3995,7 +4027,6 @@ class SelfBotManager:
             
             if lock_type:
                 if event.is_reply:
-                    # قفل برای کاربر خاص
                     reply_message = await event.get_reply_message()
                     target_id = reply_message.sender_id
                     db.set_media_lock(self.user_id, target_id, lock_type, 1 if enable else 0)
@@ -4011,7 +4042,6 @@ class SelfBotManager:
                     status = "فعال" if enable else "غیرفعال"
                     await event.edit(f"✅ قفل {lock_names[lock_type]} برای کاربر {target_id} {status} شد")
                 else:
-                    # قفل برای همه کاربران (با استفاده از target_id = 0 به معنی همه)
                     db.set_media_lock(self.user_id, 0, lock_type, 1 if enable else 0)
                     lock_names = {
                         'lock_link': 'لینک',
@@ -4155,12 +4185,10 @@ class SelfBotManager:
             now = datetime.now()
             current_minute = now.minute
             
-            # انتخاب فونت بر اساس تنظیمات کاربر
             if self.time_font_indices == 'all':
                 font_index = current_minute % len(classic_fonts)
                 font = classic_fonts[font_index]
             elif isinstance(self.time_font_indices, list) and self.time_font_indices:
-                # چرخش بین فونت‌های انتخاب شده
                 if hasattr(self, 'time_font_cycle'):
                     self.time_font_cycle = (self.time_font_cycle + 1) % len(self.time_font_indices)
                 else:
@@ -5176,7 +5204,6 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         text=f"⏳ در حال اجرای دستور..."
     )
     
-    # دستورات انیمیشن جدید
     if cmd == 'advanced_heart':
         await msg.edit_text("❤️ شروع انیمیشن قلب پیشرفته...")
         try:
@@ -5418,7 +5445,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     user_id_str = str(user_id)
     
-    # بررسی دسترسی برای دکمه‌های دارای آیدی کاربر
     if '_' in data and not data.startswith(('admin_', 'approve_', 'reject_', 'stop_selfbot_', 'restart_selfbot_')):
         parts = data.split('_')
         for part in parts:
@@ -5495,7 +5521,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await exec_command_handler(update, context)
         return
     
-    # منوهای مختلف
     parts = data.split('_')
     if len(parts) > 1:
         action = parts[0]
@@ -5648,7 +5673,6 @@ async def membership_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 # ========== هندلر پیام‌ها (عضویت) ==========
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """پردازش پیام‌های کاربر"""
     if not update.message or not update.message.text:
         return
     
@@ -5919,7 +5943,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ========== تابع بررسی فایل‌های سشن ==========
 async def check_session_files():
-    """بررسی فایل‌های سشن قبل از راه‌اندازی"""
     print("\n" + "=" * 60)
     print("🔍 بررسی فایل‌های سشن...")
     
@@ -5941,11 +5964,12 @@ async def check_session_files():
     
     print("=" * 60 + "\n")
 
-# ========== راه‌اندازی اصلی برای Render ==========
+# ========== راه‌اندازی اصلی ==========
 async def main():
     print("=" * 60)
     print("🤖 سیستم جامع عضویت و سلف‌بات")
     print(f"👑 ادمین: {ADMIN_ID}")
+    print(f"📁 پوشه سشن‌ها: {SESSIONS_FOLDER}")
     print("=" * 60)
     
     await check_session_files()
@@ -5972,36 +5996,54 @@ async def main():
     await app.start()
     await app.updater.start_polling(allowed_updates=Update.ALL_TYPES, timeout=30)
     
-    print("✅ ربات شروع شد")
+    print("✅ ربات شروع شد و آماده دریافت درخواست‌ها است")
+    print("=" * 60)
     
-    # فعال کردن سلف‌بات‌های قبلی
     active_users = db.get_active_users()
+    success_count = 0
+    fail_count = 0
+    
+    print(f"🔄 در حال راه‌اندازی {len(active_users)} سلف‌بات...")
+    
     for user in active_users:
         user_id_str = user['user_id']
         session_file = user.get('session_file')
+        
         if session_file and os.path.exists(session_file):
+            print(f"  • راه‌اندازی سلف‌بات برای کاربر {user_id_str}...", end=" ")
+            
             manager = SelfBotManager(user_id_str)
             if await manager.start(session_file):
                 selfbot_managers[user_id_str] = manager
-                print(f"✅ سلف‌بات کاربر {user_id_str} فعال شد")
+                print("✅ موفق")
+                success_count += 1
+            else:
+                print("❌ ناموفق")
+                fail_count += 1
+        else:
+            print(f"  • کاربر {user_id_str}: فایل سشن یافت نشد ❌")
+            fail_count += 1
     
-    # نگه داشتن برنامه
+    print(f"✅ {success_count} سلف‌بات با موفقیت فعال شدند")
+    if fail_count > 0:
+        print(f"⚠️ {fail_count} سلف‌بات فعال نشدند")
+    print("=" * 60)
+    
+    # شروع سرویس‌های نگهدارنده
+    asyncio.create_task(self_ping())
+    asyncio.create_task(backup_session_files())
+    
     while True:
         await asyncio.sleep(3600)
 
-# ========== اجرای همزمان وب سرور ==========
-def run_flask():
-    port = int(os.environ.get("PORT", 10000))
-    flask_app.run(host='0.0.0.0', port=port, debug=False)
-
+# ========== نقطه شروع برنامه برای Render ==========
 if __name__ == '__main__':
-    # اجرای فلاسک در ترد جداگانه
-    import threading
-    web_thread = threading.Thread(target=run_flask, daemon=True)
+    web_thread = threading.Thread(target=run_web_server, daemon=True)
     web_thread.start()
     
-    # اجرای ربات
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("🛑 ربات متوقف شد")
+        logger.info("🛑 ربات متوقف شد")
+    except Exception as e:
+        logger.error(f"❌ خطای fatal: {e}")
