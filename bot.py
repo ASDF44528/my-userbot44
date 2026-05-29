@@ -30,6 +30,8 @@ from telethon.tl.functions.contacts import BlockRequest
 from telethon.tl.functions.users import GetFullUserRequest
 from telethon.errors import MessageDeleteForbiddenError, FloodWaitError, SessionPasswordNeededError, FloodWaitError as TelethonFloodWaitError
 
+os.environ['TZ'] = 'Asia/Tehran'
+time.tzset()
 # ========== تنظیمات گوگل سرچ ==========
 GOOGLE_SEARCH_API_KEY = "AIzaSyCMYOU0NpU5xfu7GrffyywVUugd1yD2uDU"
 GOOGLE_CSE_ID = "3185e48756dfd482f"
