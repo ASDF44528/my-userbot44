@@ -107,7 +107,7 @@ def get_user_api(user_id):
     logger.info(f"API اختصاص یافته به کاربر {user_id}: {best_api['api_id']}")
     return best_api
 
-BOT_TOKEN = "8304449635:AAEu7BEdUA9V_lMZuyr_LhgX--DL8LMYCy0"
+BOT_TOKEN = "8304449635:AAGJCoQihoxvS-Wh-sPMa69PQV6ygAssFFc"
 ADMIN_ID = 6443963679
 BOT_USERNAME = "Gap_5_bot"
 
