@@ -7,6 +7,7 @@ import re
 import time
 import requests
 import random
+import threading
 import uuid
 from datetime import datetime, timedelta
 from urllib.parse import quote
@@ -5940,12 +5941,11 @@ async def check_session_files():
     
     print("=" * 60 + "\n")
 
-# ========== راه‌اندازی اصلی ==========
+# ========== راه‌اندازی اصلی برای Render ==========
 async def main():
     print("=" * 60)
     print("🤖 سیستم جامع عضویت و سلف‌بات")
     print(f"👑 ادمین: {ADMIN_ID}")
-    print(f"📁 پوشه سشن‌ها: {SESSIONS_FOLDER}")
     print("=" * 60)
     
     await check_session_files()
@@ -5972,53 +5972,36 @@ async def main():
     await app.start()
     await app.updater.start_polling(allowed_updates=Update.ALL_TYPES, timeout=30)
     
-    print("✅ ربات شروع شد و آماده دریافت درخواست‌ها است")
-    print("=" * 60)
+    print("✅ ربات شروع شد")
     
+    # فعال کردن سلف‌بات‌های قبلی
     active_users = db.get_active_users()
-    success_count = 0
-    fail_count = 0
-    
-    print(f"🔄 در حال راه‌اندازی {len(active_users)} سلف‌بات...")
-    
     for user in active_users:
         user_id_str = user['user_id']
         session_file = user.get('session_file')
-        
         if session_file and os.path.exists(session_file):
-            print(f"  • راه‌اندازی سلف‌بات برای کاربر {user_id_str}...", end=" ")
-            
             manager = SelfBotManager(user_id_str)
             if await manager.start(session_file):
                 selfbot_managers[user_id_str] = manager
-                print("✅ موفق")
-                success_count += 1
-            else:
-                print("❌ ناموفق")
-                fail_count += 1
-        else:
-            print(f"  • کاربر {user_id_str}: فایل سشن یافت نشد ❌")
-            fail_count += 1
+                print(f"✅ سلف‌بات کاربر {user_id_str} فعال شد")
     
-    print(f"✅ {success_count} سلف‌بات با موفقیت فعال شدند")
-    if fail_count > 0:
-        print(f"⚠️ {fail_count} سلف‌بات فعال نشدند")
-    print("=" * 60)
-    
-    # نگه داشتن برنامه در حالت اجرا
+    # نگه داشتن برنامه
     while True:
         await asyncio.sleep(3600)
 
-# ========== نقطه شروع برنامه برای Render ==========
+# ========== اجرای همزمان وب سرور ==========
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    flask_app.run(host='0.0.0.0', port=port, debug=False)
+
 if __name__ == '__main__':
-    # راه‌اندازی وب سرور در یک ترد جداگانه
-    web_thread = threading.Thread(target=run_web_server, daemon=True)
+    # اجرای فلاسک در ترد جداگانه
+    import threading
+    web_thread = threading.Thread(target=run_flask, daemon=True)
     web_thread.start()
     
-    # اجرای ربات تلگرام
+    # اجرای ربات
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("🛑 ربات متوقف شد")
-    except Exception as e:
-        logger.error(f"❌ خطای fatal: {e}")
+        print("🛑 ربات متوقف شد")
