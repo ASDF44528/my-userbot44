@@ -30,8 +30,10 @@ from telethon.tl.functions.contacts import BlockRequest
 from telethon.tl.functions.users import GetFullUserRequest
 from telethon.errors import MessageDeleteForbiddenError, FloodWaitError, SessionPasswordNeededError, FloodWaitError as TelethonFloodWaitError
 
+# تنظیم منطقه زمانی به ایران
 os.environ['TZ'] = 'Asia/Tehran'
 time.tzset()
+
 # ========== تنظیمات گوگل سرچ ==========
 GOOGLE_SEARCH_API_KEY = "AIzaSyCMYOU0NpU5xfu7GrffyywVUugd1yD2uDU"
 GOOGLE_CSE_ID = "3185e48756dfd482f"
@@ -55,6 +57,12 @@ def home():
 @flask_app.route('/health')
 def health():
     return jsonify({"status": "healthy"}), 200
+
+# اضافه کن 👇
+@flask_app.route('/ping')
+def ping():
+    """مسیر مخصوص cron-job.org برای جلوگیری از خواب ربات"""
+    return jsonify({"status": "alive", "message": "Bot is awake"}), 200
 
 def run_web_server():
     """اجرای سرور وب برای Render"""
@@ -99,7 +107,7 @@ def get_user_api(user_id):
     logger.info(f"API اختصاص یافته به کاربر {user_id}: {best_api['api_id']}")
     return best_api
 
-BOT_TOKEN = "8304449635:AAGJCoQihoxvS-Wh-sPMa69PQV6ygAssFFc"
+BOT_TOKEN = "8304449635:AAEu7BEdUA9V_lMZuyr_LhgX--DL8LMYCy0"
 ADMIN_ID = 6443963679
 BOT_USERNAME = "Gap_5_bot"
 
