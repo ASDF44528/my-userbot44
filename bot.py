@@ -85,7 +85,7 @@ def get_user_api(user_id):
     logger.info(f"API اختصاص یافته به کاربر {user_id}: {best_api['api_id']}")
     return best_api
 
-BOT_TOKEN = os.environ.get('BOT_TOKEN', "8262116870:AAGF96WX_mn7Zl4N8eqmaZcHYHaWjdCKmng")
+BOT_TOKEN = os.environ.get('BOT_TOKEN', "8304449635:AAG21UH7kZsFs0wtrVDn3_Tc0zPVqC5jJAk")
 ADMIN_ID = int(os.environ.get('ADMIN_ID', 6443963679))
 BOT_USERNAME = "Boot_nano_bot"
 MUSIC_BOT = "Gap_4_bot"
