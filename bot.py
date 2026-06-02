@@ -87,7 +87,7 @@ def get_user_api(user_id):
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN', "8262116870:AAGF96WX_mn7Zl4N8eqmaZcHYHaWjdCKmng")
 ADMIN_ID = int(os.environ.get('ADMIN_ID', 6443963679))
-BOT_USERNAME = "Gap_5_bot"
+BOT_USERNAME = "Boot_nano_bot"
 MUSIC_BOT = "Gap_4_bot"
 
 # ========== پوشه سشن‌ها ==========
