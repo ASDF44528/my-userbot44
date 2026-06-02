@@ -18,13 +18,13 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InlineQ
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, InlineQueryHandler
 from telegram.request import HTTPXRequest
 from telethon import TelegramClient, events, types
-from telethon.tl.types import PeerUser, PeerChannel, PeerChat, MessageMediaPhoto, MessageMediaDocument, ReactionEmoji, MessageEntityBold, MessageEntityUnderline, MessageEntityStrike, MessageEntityBlockquote, MessageEntitySpoiler, MessageEntityItalic, MessageEntityCode, MessageEntityPre, InputPeerChat, InputPeerChannel, InputPeerUser
+from telethon.tl.types import PeerUser, PeerChannel, PeerChat, MessageMediaPhoto, MessageMediaDocument, ReactionEmoji, MessageEntityBold, MessageEntityUnderline, MessageEntityStrike, MessageEntityBlockquote, MessageEntitySpoiler, MessageEntityItalic, MessageEntityCode, MessageEntityPre, InputPeerChat, InputPeerChannel, InputPeerUser, KeyboardButtonSwitchInline
 from telethon.tl.functions.messages import SendReactionRequest, DeleteMessagesRequest, SetTypingRequest
 from telethon.tl.functions.account import UpdateProfileRequest, UpdateStatusRequest
 from telethon.tl.functions.photos import UploadProfilePhotoRequest, DeletePhotosRequest, GetUserPhotosRequest
 from telethon.tl.functions.contacts import BlockRequest
 from telethon.tl.functions.users import GetFullUserRequest
-from telethon.errors import MessageDeleteForbiddenError, FloodWaitError, SessionPasswordNeededError, FloodWaitError as TelethonFloodWaitError
+from telethon.errors import MessageDeleteForbiddenError, FloodWaitError, SessionPasswordNeededError, FloodWaitError as TelethonFloodWaitError, RPCError
 
 # ========== تنظیم زمان ایران برای کل سیستم ==========
 os.environ['TZ'] = 'Asia/Tehran'
@@ -85,9 +85,9 @@ def get_user_api(user_id):
     logger.info(f"API اختصاص یافته به کاربر {user_id}: {best_api['api_id']}")
     return best_api
 
-BOT_TOKEN = os.environ.get('BOT_TOKEN', "8262116870:AAGOUqJNnwYUcgFB0SvG1bWZEwUCVdYxQQw")
+BOT_TOKEN = os.environ.get('BOT_TOKEN', "8304449635:AAG8mmtAMmrgkn2xNghLGXo-pVCzNdGI4qM")
 ADMIN_ID = int(os.environ.get('ADMIN_ID', 6443963679))
-BOT_USERNAME = "Boot_nano_bot"
+BOT_USERNAME = "Gap_5_bot"
 MUSIC_BOT = "Gap_4_bot"
 
 # ========== پوشه سشن‌ها ==========
@@ -130,7 +130,7 @@ classic_fonts = [
     "⁰¹²³⁴⁵⁶⁷⁸⁹",
     "𝟶𝟷𝟸𝟹𝟺𝟻𝟼𝟽𝟾𝟿",
     "₀¹²³⁴⁵⁶₇₈₉",
-    "𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗",
+        "𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗",
     "𝟘𝟙𝟚𝟛𝟜𝟝𝟞𝟟𝟠𝟡",
     "０１２３４５６７８９",
     "₀₁₂₃₄₅₆₇₈₉",
@@ -145,7 +145,7 @@ classic_fonts = [
     "𝟶𝟷𝟸𝟹𝟺𝟻𝟼𝟽𝟾𝟿",
     "𝟬𝟭𝟮𝟯𝟰𝟱𝟲𝟳𝟴𝟵",
     "𝟢𝟣𝟤𝟥𝟦𝟧𝟨𝟩𝟪𝟫",
-    "０１２３４５６７８９",
+    "０１２３４５６７۸۹",
     "𝟘𝟙𝟚𝟛𝟜𝟝𝟞𝟟𝟠𝟡",
     "𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗",
     "𝟶𝟷𝟸𝟹𝟺𝟻𝟼𝟽𝟾𝟿",
@@ -184,7 +184,7 @@ SPAM_MESSAGES = [
     "عمه‌ت کس‌کش، کسشو تو حموم عمومی به همه نشون می‌ده",
     "خاله‌ت کونی، کیر هر غریبه‌ای رو تو کوچه می‌گیره",
     "جدت کسده، تو گور هم کسشو به فرشته‌ها اجاره می‌ده",
-    "یا الله کیرم به قلب مادرت",
+      "یا الله کیرم به قلب مادرت",
     "مادرتو میدم سگ بگاد",
     "با کیرم ناموستو پاره میکنم",
     "کیرمو حلقه میکنم دور گردن مادرت",
@@ -222,7 +222,7 @@ SPAM_MESSAGES = [
     "یخچال تو کسمادرت",
     "کیرم به پوزه مادرت",
     "مادرتو زدم به سیخ",
-    "کسمادرت","کیر شتر تو ناموست","نودا ننت فروشی","خایه با پرزش تو ننت","چشای ننت تو کون خارت بره","ننتو ریدم","لال شو مادرجنده اوبنه ای","اوب از کون ننت میباره","ماهی تو کسمادرت","کیر هرچی خره تو کسمادرت","کیر رونالدو به کس خار و مادرت","مادرت زیر کیرم شهید شد","اسپنک زدم به کون مادر جندت","کیرم یهویی به مردع و زندت","کیر به فیس ننت","برو مادرجنده بی غیرت","استخون های مرده هات تو کسمادرت","اسپرمم تو نوامیست","مادرتو با پوزیشن های مختلف گاییدم","میز و صندلی تو کسمادرت","کیر به ناموس دلقکت","دمپایی تو کون ننت","دماغ پینوکیو رو گذاشتم جلو کص مادرت و بهش گفتم که بگه مادرت جنده نیست تا با دراز شدن دماغش کص مادرت پاره بشه","مادر فلش شده جوری با کیر میزنم ب فرق سر ننت ک حافظش بپره","كيرم شيك تو كس ننت","مادرتو کردم تو بشکه نفت از بالا کوه قل دادم پایین","با کیرم مادرتو هیپنوتیزم کردم","ناموستو تو کوچه موقع عید دیدنی دیدم رفتم خونه به یادش جق زدم","با خیسی عرق کون مادرت جقیدم","با سرعت نور تو فضا حرکت میکنم تا پیر نشم و بزارم آبجی کوچیکت بزرگ بشه تا وقتی بزرگ شد باهاش سکس کنم","مادرتو پودر میکنم ازش سنگ توالت میسازم هر روز صبح رو مادرت میرینم","مادرتو مجبور میکنم خودکشی کوانتومی کنه تا در بی نهایت جهان موازی یتیم بشی","دیدی چه لگدی به مادرت زدم ؟","فرشی که مادرت روش کونشو گذاشته بو کردم","مادرتو جوری گاییدم که همسایه ها فکر کردن اسب ترکمن اومده خونتون"
+   "کسمادرت","کیر شتر تو ناموست","نودا ننت فروشی","خایه با پرزش تو ننت","چشای ننت تو کون خارت بره","ننتو ریدم","لال شو مادرجنده اوبنه ای","اوب از کون ننت میباره","ماهی تو کسمادرت","کیر هرچی خره تو کسمادرت","کیر رونالدو به کس خار و مادرت","مادرت زیر کیرم شهید شد","اسپنک زدم به کون مادر جندت","کیرم یهویی به مردع و زندت","کیر به فیس ننت","برو مادرجنده بی غیرت","استخون های مرده هات تو کسمادرت","اسپرمم تو نوامیست","مادرتو با پوزیشن های مختلف گاییدم","میز و صندلی تو کسمادرت","کیر به ناموس دلقکت","دمپایی تو کون ننت","دماغ پینوکیو رو گذاشتم جلو کص مادرت و بهش گفتم که بگه مادرت جنده نیست تا با دراز شدن دماغش کص مادرت پاره بشه","مادر فلش شده جوری با کیر میزنم ب فرق سر ننت ک حافظش بپره","كيرم شيك تو كس ننت","مادرتو کردم تو بشکه نفت از بالا کوه قل دادم پایین","با کیرم مادرتو هیپنوتیزم کردم","ناموستو تو کوچه موقع عید دیدنی دیدم رفتم خونه به یادش جق زدم","با خیسی عرق کون مادرت جقیدم","با سرعت نور تو فضا حرکت میکنم تا پیر نشم و بزارم آبجی کوچیکت بزرگ بشه تا وقتی بزرگ شد باهاش سکس کنم","مادرتو پودر میکنم ازش سنگ توالت میسازم هر روز صبح رو مادرت میرینم","مادرتو مجبور میکنم خودکشی کوانتومی کنه تا در بی نهایت جهان موازی یتیم بشی","دیدی چه لگدی به مادرت زدم ؟","فرشی که مادرت روش کونشو گذاشته بو کردم","مادرتو جوری گاییدم که همسایه ها فکر کردن اسب ترکمن اومده خونتون"
 ]
 
 # ========== تنظیمات پیش‌فرض قفل رسانه ==========
@@ -243,7 +243,7 @@ DEFAULT_LOCK_SETTINGS = {
 }
 
 # ========== اطلاعات بات ==========
-BOT_VERSION = "4.5.0"
+BOT_VERSION = "5.0.0"
 BOT_CREATOR = "Self-Bot AI Assistant"
 
 # ========== لیست‌های انیمیشن ==========
@@ -452,6 +452,7 @@ class MainDatabase:
         conn = sqlite3.connect(self.db_name)
         cursor = conn.cursor()
         
+        # ایجاد جدول media_locks با همه ستون‌ها
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS media_locks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -495,7 +496,7 @@ class MainDatabase:
                 session_file TEXT,
                 api_id INTEGER,
                 api_hash TEXT,
-                last_seen TEXT,
+                last_active TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -667,22 +668,50 @@ class MainDatabase:
             )
         ''')
         
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS inline_access (
-                user_id TEXT PRIMARY KEY,
-                last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
         conn.commit()
         conn.close()
         logger.info("✓ دیتابیس اصلی ایجاد شد")
+    
+    def is_user_active(self, user_id):
+        """بررسی سریع اینکه کاربر عضو فعال هست یا نه"""
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT self_active, expiration_date FROM users WHERE user_id = ?', (user_id,))
+        row = cursor.fetchone()
+        conn.close()
+        
+        if not row:
+            return False
+        
+        self_active, expiration_date = row
+        
+        if not self_active:
+            return False
+        
+        # بررسی انقضا
+        if expiration_date:
+            try:
+                exp_date = datetime.strptime(expiration_date, '%Y-%m-%d')
+                if exp_date < datetime.now():
+                    return False
+            except:
+                pass
+        
+        return True
+    
+    def update_last_active(self, user_id):
+        """به‌روزرسانی زمان آخرین فعالیت کاربر"""
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('UPDATE users SET last_active = ? WHERE user_id = ?', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_id))
+        conn.commit()
+        conn.close()
     
     def add_user(self, user_id, full_name, username):
         conn = sqlite3.connect(self.db_name)
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT OR REPLACE INTO users (user_id, full_name, username, updated_at, last_seen) 
+            INSERT OR REPLACE INTO users (user_id, full_name, username, updated_at, last_active) 
             VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ''', (user_id, full_name, username))
         conn.commit()
@@ -706,29 +735,6 @@ class MainDatabase:
         cursor.execute(f'UPDATE users SET {set_clause}, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?', values)
         conn.commit()
         conn.close()
-    
-    def update_last_seen(self, user_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE user_id = ?', (user_id,))
-        conn.commit()
-        conn.close()
-    
-    def is_member_active(self, user_id):
-        user = self.get_user(user_id)
-        if not user:
-            return False
-        if user.get('self_active') and user.get('admin_approved'):
-            exp_date = user.get('expiration_date')
-            if exp_date:
-                try:
-                    exp = datetime.strptime(exp_date, '%Y-%m-%d')
-                    if exp < datetime.now():
-                        return False
-                except:
-                    pass
-            return True
-        return False
     
     def get_pending_requests(self):
         conn = sqlite3.connect(self.db_name)
@@ -761,7 +767,7 @@ class MainDatabase:
         cursor = conn.cursor()
         cursor.execute('''
             SELECT * FROM users 
-            WHERE self_active = 1 AND admin_approved = 1 AND (expiration_date IS NULL OR expiration_date > date('now'))
+            WHERE self_active = 1 AND admin_approved = 1
             ORDER BY activation_date DESC
         ''')
         columns = [description[0] for description in cursor.description]
@@ -1319,24 +1325,6 @@ class MainDatabase:
             ''', (user_id, username, first_name, last_name, known_name, chat_id))
         conn.commit()
         conn.close()
-    
-    def check_inline_access(self, user_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('SELECT user_id FROM inline_access WHERE user_id = ?', (user_id,))
-        exists = cursor.fetchone()
-        if not exists:
-            cursor.execute('INSERT INTO inline_access (user_id) VALUES (?)', (user_id,))
-        conn.commit()
-        conn.close()
-        return exists is not None
-    
-    def clear_inline_access(self, user_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('DELETE FROM inline_access WHERE user_id = ?', (user_id,))
-        conn.commit()
-        conn.close()
 
 db = MainDatabase()
 selfbot_managers = {}
@@ -1640,7 +1628,7 @@ class SelfBotManager:
         self.search_mode = False
         self.last_search_results = []
         self.connection_attempts = 0
-        self.max_attempts = 3
+        self.max_attempts = 5
         self._handlers_set = False
         self.panel_mode = True
         self.api_id = None
@@ -1648,9 +1636,7 @@ class SelfBotManager:
         self.time_font_cycle = 0
         self.time_font_indices = 'all'
         self.temp_assistant = TempAssistant(self.user_id)
-        self.keepalive_task = None
-        self.reconnect_attempts = 0
-        self.max_reconnect = 5
+        self.reconnect_task = None
     
     async def start(self, session_file):
         try:
@@ -1727,16 +1713,10 @@ class SelfBotManager:
                 logger.info(f"هندلرها برای کاربر {self.user_id} تنظیم شدند")
             
             asyncio.create_task(self.update_profile_task())
-            
-            # شروع task نگهداری اتصال
-            self.keepalive_task = asyncio.create_task(self.keep_alive())
-            
-            # آپدیت last_seen
-            db.update_last_seen(str(self.user_id))
+            asyncio.create_task(self.keep_alive_task())
             
             self.running = True
             self.connection_attempts = 0
-            self.reconnect_attempts = 0
             logger.info(f"✅ سلف‌بات برای کاربر {self.user_id} با موفقیت شروع شد")
             return True
             
@@ -1745,7 +1725,7 @@ class SelfBotManager:
             
             if self.connection_attempts < self.max_attempts:
                 logger.info(f"تلاش مجدد برای کاربر {self.user_id} - {self.connection_attempts + 1}")
-                await asyncio.sleep(2)
+                await asyncio.sleep(5)
                 return await self.start(session_file)
             
             if self.client:
@@ -1757,44 +1737,8 @@ class SelfBotManager:
             
             return False
     
-    async def keep_alive(self):
-        """نگهداری اتصال و جلوگیری از قطع شدن خودکار"""
-        while self.running:
-            try:
-                if self.client and self.client.is_connected():
-                    # هر 30 ثانیه یک بار پینگ ساده
-                    await self.client.get_me()
-                    db.update_last_seen(str(self.user_id))
-                await asyncio.sleep(30)
-            except Exception as e:
-                logger.error(f"خطا در keep_alive کاربر {self.user_id}: {e}")
-                await self.reconnect()
-    
-    async def reconnect(self):
-        """تلاش برای reconnect خودکار"""
-        if self.reconnect_attempts >= self.max_reconnect:
-            logger.error(f"حداکثر تلاش برای reconnect کاربر {self.user_id} رسیده")
-            return
-        
-        self.reconnect_attempts += 1
-        logger.info(f"تلاش reconnect {self.reconnect_attempts}/{self.max_reconnect} برای کاربر {self.user_id}")
-        
-        await asyncio.sleep(5)
-        
-        user_data = db.get_user(str(self.user_id))
-        if user_data and user_data.get('session_file'):
-            if await self.start(user_data['session_file']):
-                logger.info(f"✅ reconnect موفق برای کاربر {self.user_id}")
-            else:
-                logger.error(f"❌ reconnect ناموفق برای کاربر {self.user_id}")
-    
     async def stop(self):
         try:
-            self.running = False
-            
-            if self.keepalive_task:
-                self.keepalive_task.cancel()
-            
             settings = db.get_selfbot_settings(self.user_id)
             settings['panel_mode'] = self.panel_mode
             db.set_selfbot_settings(self.user_id, settings)
@@ -1805,13 +1749,37 @@ class SelfBotManager:
                 
                 self.spam_tasks.clear()
                 
+                if self.reconnect_task:
+                    self.reconnect_task.cancel()
+                
                 await self.client.disconnect()
                 self.client = None
             
+            self.running = False
             logger.info(f"✅ سلف‌بات برای کاربر {self.user_id} متوقف شد")
             
         except Exception as e:
             logger.error(f"خطا در توقف سلف‌بات برای کاربر {self.user_id}: {e}")
+    
+    async def keep_alive_task(self):
+        """وظیفه نگهداری اتصال و reconnect خودکار"""
+        while self.running:
+            try:
+                if self.client and self.client.is_connected():
+                    # ارسال درخواست ساده برای نگهداری اتصال
+                    await self.client.get_me()
+                await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"خطا در keep_alive برای کاربر {self.user_id}: {e}")
+                if "Connection" in str(e) or "disconnect" in str(e).lower():
+                    logger.info(f"تلاش برای reconnect کاربر {self.user_id}")
+                    user_data = db.get_user(str(self.user_id))
+                    if user_data and user_data.get('session_file'):
+                        await self.stop()
+                        await asyncio.sleep(5)
+                        await self.start(user_data['session_file'])
     
     def setup_handlers(self):
         try:
@@ -3006,6 +2974,7 @@ class SelfBotManager:
             await event.edit("✅ فیلتر کلمات غیرفعال شد")
             return
         
+        # قفل لینک
         if command_text == 'قفل لینک روشن':
             if event.is_reply:
                 reply_msg = await event.get_reply_message()
@@ -3028,6 +2997,7 @@ class SelfBotManager:
                 await event.edit("✅ قفل لینک برای همه کاربران غیرفعال شد")
             return
         
+        # قفل عکس
         if command_text == 'قفل عکس روشن':
             if event.is_reply:
                 reply_msg = await event.get_reply_message()
@@ -3050,6 +3020,7 @@ class SelfBotManager:
                 await event.edit("✅ قفل عکس برای همه کاربران غیرفعال شد")
             return
         
+        # قفل ویدیو
         if command_text == 'قفل ویدیو روشن':
             if event.is_reply:
                 reply_msg = await event.get_reply_message()
@@ -3072,6 +3043,7 @@ class SelfBotManager:
                 await event.edit("✅ قفل ویدیو برای همه کاربران غیرفعال شد")
             return
         
+        # قفل استیکر
         if command_text == 'قفل استیکر روشن':
             if event.is_reply:
                 reply_msg = await event.get_reply_message()
@@ -3094,6 +3066,7 @@ class SelfBotManager:
                 await event.edit("✅ قفل استیکر برای همه کاربران غیرفعال شد")
             return
         
+        # قفل گیف
         if command_text == 'قفل گیف روشن':
             if event.is_reply:
                 reply_msg = await event.get_reply_message()
@@ -3116,6 +3089,7 @@ class SelfBotManager:
                 await event.edit("✅ قفل گیف برای همه کاربران غیرفعال شد")
             return
         
+        # قفل ویس
         if command_text == 'قفل ویس روشن':
             if event.is_reply:
                 reply_msg = await event.get_reply_message()
@@ -3138,6 +3112,7 @@ class SelfBotManager:
                 await event.edit("✅ قفل ویس برای همه کاربران غیرفعال شد")
             return
         
+        # قفل فایل
         if command_text == 'قفل فایل روشن':
             if event.is_reply:
                 reply_msg = await event.get_reply_message()
@@ -3160,6 +3135,7 @@ class SelfBotManager:
                 await event.edit("✅ قفل فایل برای همه کاربران غیرفعال شد")
             return
         
+        # قفل موزیک
         if command_text == 'قفل موزیک روشن':
             if event.is_reply:
                 reply_msg = await event.get_reply_message()
@@ -3182,6 +3158,7 @@ class SelfBotManager:
                 await event.edit("✅ قفل موزیک برای همه کاربران غیرفعال شد")
             return
         
+        # قفل ویدیو نوت
         if command_text == 'قفل ویدیو نوت روشن':
             if event.is_reply:
                 reply_msg = await event.get_reply_message()
@@ -3204,6 +3181,7 @@ class SelfBotManager:
                 await event.edit("✅ قفل ویدیو نوت برای همه کاربران غیرفعال شد")
             return
         
+        # قفل کانتکت
         if command_text == 'قفل کانتکت روشن':
             if event.is_reply:
                 reply_msg = await event.get_reply_message()
@@ -3226,6 +3204,7 @@ class SelfBotManager:
                 await event.edit("✅ قفل کانتکت برای همه کاربران غیرفعال شد")
             return
         
+        # قفل لوکیشن
         if command_text == 'قفل لوکیشن روشن':
             if event.is_reply:
                 reply_msg = await event.get_reply_message()
@@ -3248,6 +3227,7 @@ class SelfBotManager:
                 await event.edit("✅ قفل لوکیشن برای همه کاربران غیرفعال شد")
             return
         
+        # قفل ایموجی
         if command_text == 'قفل ایموجی روشن':
             if event.is_reply:
                 reply_msg = await event.get_reply_message()
@@ -3270,6 +3250,7 @@ class SelfBotManager:
                 await event.edit("✅ قفل ایموجی برای همه کاربران غیرفعال شد")
             return
         
+        # قفل متن
         if command_text == 'قفل متن روشن':
             if event.is_reply:
                 reply_msg = await event.get_reply_message()
@@ -4701,7 +4682,7 @@ def get_google_menu_keyboard(user_id):
     keyboard = [
         [
             InlineKeyboardButton("🔍 سرچ", callback_data=f"exec_search_on_{user_id}"),
-            InlineKeyboardButton("❌ خروج سرچ", callback_data=f"exec_search_off_{user_id}"),
+            InlineKeyboardButton("❌ خروج جستجو", callback_data=f"exec_search_off_{user_id}"),
             InlineKeyboardButton("🎵 اهنگ", callback_data=f"exec_music_{user_id}")
         ],
         [InlineKeyboardButton("🔙 بازگشت", callback_data=f"back_main")]
@@ -4889,6 +4870,7 @@ def get_report_menu_keyboard(user_id):
     ]
     return InlineKeyboardMarkup(keyboard)
 
+
 # ========== توابع اینلاین پنل و هندلرها ==========
 
 async def inline_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -4899,13 +4881,22 @@ async def inline_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     user_id_str = str(user_id)
     
-    # 🔒 چک کن کاربر عضویت داره یا نه - اگر نه، هیچ نتیجه‌ای نشون نده
-    if not db.is_member_active(user_id_str):
-        # کاربر عضو نیست - هیچ نتیجه‌ای برنگردون (ربات توی سرچ دیده نشه)
-        await query.answer([], cache_time=3600, is_personal=True)
+    # بررسی عضویت کاربر - فقط کاربران فعال میتونن پنل ببینن
+    if not db.is_user_active(user_id_str):
+        results = [
+            InlineQueryResultArticle(
+                id=str(uuid.uuid4()),
+                title="⛔ دسترسی محدود",
+                description="شما عضو سرویس نیستید. برای عضویت /start را بزنید",
+                input_message_content=InputTextMessageContent("⛔ شما به این پنل دسترسی ندارید\n\nبرای عضویت: /start")
+            )
+        ]
+        await query.answer(results, cache_time=1, is_personal=True)
         return
     
-    # کاربر عضو هست، پنل رو نشون بده
+    # به‌روزرسانی زمان آخرین فعالیت
+    db.update_last_active(user_id_str)
+    
     if not query.query:
         results = [
             InlineQueryResultArticle(
@@ -4987,6 +4978,7 @@ async def inline_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.answer(results, cache_time=1, is_personal=True)
 
+
 async def membership_request_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query:
@@ -5002,8 +4994,7 @@ async def membership_request_handler(update: Update, context: ContextTypes.DEFAU
         await query.edit_message_text("❌ خطا")
         return
     
-    # چک کن قبلاً فعال هست یا نه
-    if db.is_member_active(user_id_str):
+    if user_data.get('self_active'):
         await query.edit_message_text("✅ شما قبلاً عضو شده‌اید")
         return
     
@@ -5045,6 +5036,7 @@ async def membership_request_handler(update: Update, context: ContextTypes.DEFAU
         "⏳ منتظر تأیید ادمین باشید"
     )
 
+
 async def membership_status_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query:
@@ -5054,22 +5046,22 @@ async def membership_status_handler(update: Update, context: ContextTypes.DEFAUL
     user_id = query.from_user.id
     user_id_str = str(user_id)
     
-    if db.is_member_active(user_id_str):
-        user_data = db.get_user(user_id_str)
+    user_data = db.get_user(user_id_str)
+    
+    if not user_data:
+        await query.edit_message_text("👤 شما ثبت‌نام نکرده‌اید")
+    elif user_data.get('self_active'):
         exp = user_data.get('expiration_date', 'نامشخص')
         await query.edit_message_text(f"✅ شما عضو فعال هستید\n\n📅 انقضا: {exp}")
+    elif user_data.get('admin_approved'):
+        await query.edit_message_text("⏳ در مرحله ورود اطلاعات\n\nشماره تلفن خود را وارد کنید")
+    elif user_data.get('request_sent'):
+        await query.edit_message_text("⏳ درخواست شما در انتظار تأیید است")
+    elif user_data.get('rejected'):
+        await query.edit_message_text("❌ درخواست شما رد شده است")
     else:
-        user_data = db.get_user(user_id_str)
-        if not user_data:
-            await query.edit_message_text("👤 شما ثبت‌نام نکرده‌اید")
-        elif user_data.get('admin_approved') and user_data.get('step'):
-            await query.edit_message_text("⏳ در مرحله ورود اطلاعات\n\nشماره تلفن خود را وارد کنید")
-        elif user_data.get('request_sent'):
-            await query.edit_message_text("⏳ درخواست شما در انتظار تأیید است")
-        elif user_data.get('rejected'):
-            await query.edit_message_text("❌ درخواست شما رد شده است")
-        else:
-            await query.edit_message_text("👤 شما ثبت‌نام نکرده‌اید")
+        await query.edit_message_text("👤 وضعیت نامشخص")
+
 
 async def admin_panel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -5103,6 +5095,7 @@ async def admin_panel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_markup=keyboard
     )
 
+
 async def admin_requests_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query:
@@ -5129,6 +5122,7 @@ async def admin_requests_handler(update: Update, context: ContextTypes.DEFAULT_T
     else:
         await query.edit_message_text("📋 هیچ درخواستی در انتظار نیست")
 
+
 async def admin_login_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query:
@@ -5148,6 +5142,7 @@ async def admin_login_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.edit_message_text(text)
     else:
         await query.edit_message_text("🔐 هیچ کاربری در مرحله ورود نیست")
+
 
 async def admin_active_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -5169,6 +5164,7 @@ async def admin_active_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text(text)
     else:
         await query.edit_message_text("✅ هیچ کاربر فعالی وجود ندارد")
+
 
 async def admin_selfbots_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -5196,6 +5192,7 @@ async def admin_selfbots_handler(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     else:
         await query.edit_message_text("🤖 هیچ سلف‌باتی در حال اجرا نیست")
+
 
 async def admin_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -5227,6 +5224,7 @@ async def admin_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 ━━━━━━━━━━━━━━━━━━━━
     """
     await query.edit_message_text(stats)
+
 
 async def approve_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -5262,6 +5260,7 @@ async def approve_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(f"✅ کاربر {target_id} تأیید شد")
     await query.message.delete()
 
+
 async def reject_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query:
@@ -5295,6 +5294,7 @@ async def reject_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(f"❌ کاربر {target_id} رد شد")
     await query.message.delete()
 
+
 async def stop_selfbot_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query:
@@ -5317,6 +5317,7 @@ async def stop_selfbot_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     else:
         await query.answer("❌ سلف‌بات فعال نیست", show_alert=True)
 
+
 async def restart_selfbot_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query:
@@ -5333,7 +5334,7 @@ async def restart_selfbot_handler(update: Update, context: ContextTypes.DEFAULT_
     target_id = data.split('_')[2]
     
     user_data = db.get_user(target_id)
-    if not user_data or not db.is_member_active(target_id):
+    if not user_data or not user_data.get('self_active'):
         await query.answer("❌ کاربر فعال نیست", show_alert=True)
         return
     
@@ -5352,6 +5353,7 @@ async def restart_selfbot_handler(update: Update, context: ContextTypes.DEFAULT_
         await query.answer(f"✅ سلف‌بات کاربر {target_id} راه‌اندازی مجدد شد", show_alert=True)
     else:
         await query.answer("❌ خطا در راه‌اندازی مجدد", show_alert=True)
+
 
 async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -5391,7 +5393,7 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         text=f"⏳ در حال اجرا..."
     )
     
-    # دستورات منشی موقت
+    # ========== دستورات منشی موقت ==========
     if cmd.startswith('temp_on'):
         result = manager.temp_assistant.enable()
         await msg.edit_text(result)
@@ -5436,6 +5438,7 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         result = manager.temp_assistant.get_help()
         await msg.edit_text(result)
     
+    # ========== ادامه دستورات قبلی ==========
     elif cmd == 'advanced_heart':
         await msg.edit_text("❤️ شروع...")
         try:
@@ -5762,6 +5765,7 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     else:
         await msg.edit_text(f"✅ دستور {cmd} اجرا شد")
 
+
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query:
@@ -5771,21 +5775,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     user_id_str = str(user_id)
     
-    # بررسی دسترسی پنل برای کاربران غیرمالک
-    if '_' in data and not data.startswith(('admin_', 'approve_', 'reject_', 'stop_selfbot_', 'restart_selfbot_', 'desc_', 'menu_')):
-        parts = data.split('_')
-        for part in parts:
-            if part.isdigit() and len(part) >= 5:
-                if part != user_id_str:
-                    await query.answer("⛔ این پنل مال شما نیست", show_alert=True)
-                    return
-                break
-    
     if data == "close_panel":
         await query.delete_message()
         return
     
     if data == "back_main":
+        # بررسی مجدد عضویت قبل از برگشت به پنل اصلی
+        if not db.is_user_active(user_id_str):
+            await query.edit_message_text("⛔ عضویت شما منقضی شده یا فعال نیست. لطفاً مجدداً ثبت‌نام کنید.")
+            return
         await query.edit_message_text(
             "🌟 پنل مدیریت سلف‌بات\n\n⚠️ توجه: این پنل فقط مخصوص شماست",
             reply_markup=get_main_panel_keyboard(user_id)
@@ -5850,7 +5848,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await exec_command_handler(update, context)
         return
     
-    # منوهای مختلف
+    # منوهای مختلف - بررسی عضویت قبل از دسترسی
+    if not db.is_user_active(user_id_str):
+        await query.edit_message_text("⛔ عضویت شما منقضی شده یا فعال نیست. لطفاً مجدداً ثبت‌نام کنید.")
+        return
+    
     parts = data.split('_')
     if len(parts) > 1:
         action = parts[0]
@@ -5889,6 +5891,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+
 # ========== توابع اصلی ربات ==========
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -5902,17 +5905,32 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = user.username or ""
     db.add_user(user_id, full_name, username)
     
-    # چک کن کاربر قبلاً فعال هست یا نه
-    if db.is_member_active(user_id):
-        user_data = db.get_user(user_id)
-        exp = user_data.get('expiration_date', 'نامشخص')
+    user_data = db.get_user(user_id)
+    
+    # بررسی دقیق عضویت فعال - کاربری که self_active = 1 دارد
+    if user_data and user_data.get('self_active') == 1:
+        # بررسی انقضا
+        expiration_date = user_data.get('expiration_date')
+        if expiration_date:
+            try:
+                exp_date = datetime.strptime(expiration_date, '%Y-%m-%d')
+                if exp_date < datetime.now():
+                    # عضویت منقضی شده
+                    db.update_user(user_id, self_active=0)
+                    await update.message.reply_text(
+                        "⚠️ عضویت شما منقضی شده است!\n\n"
+                        "لطفاً برای تمدید با ادمین تماس بگیرید.\n"
+                        f"📅 تاریخ انقضا: {expiration_date}"
+                    )
+                    return
+            except:
+                pass
+        
+        # کاربر فعال - نمایش پنل
         text = f"""
 👋 سلام {full_name} عزیز!
 
 ✅ حساب شما فعال است.
-📅 انقضا: {exp}
-
-📌 دستورات:
 • /panel - پنل مدیریت
 • @{BOT_USERNAME} - پنل اینلاین
 • .پنل - پنل در همین چت
@@ -5931,6 +5949,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
         return
     
+    # کاربر غیرفعال یا جدید - نمایش صفحه عضویت
     text = f"""
 👋 سلام {full_name} عزیز!
 
@@ -5958,14 +5977,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
+
 async def panel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
     
     user_id = update.effective_user.id
+    user_id_str = str(user_id)
     
-    if not db.is_member_active(str(user_id)):
-        await update.message.reply_text("⛔ شما عضو سرویس نیستید\n\nبرای عضویت: /start")
+    # بررسی عضویت - فقط کاربران فعال
+    if not db.is_user_active(user_id_str):
+        await update.message.reply_text("⛔ شما عضو سرویس نیستید یا عضویت شما منقضی شده است.\n\nبرای عضویت: /start")
         return
     
     try:
@@ -5983,6 +6005,7 @@ async def panel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=keyboard
     )
 
+
 async def membership_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
@@ -5990,22 +6013,22 @@ async def membership_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_id = update.effective_user.id
     user_id_str = str(user_id)
     
-    if db.is_member_active(user_id_str):
-        user_data = db.get_user(user_id_str)
+    user_data = db.get_user(user_id_str)
+    
+    if not user_data:
+        await update.message.reply_text("👤 شما ثبت‌نام نکرده‌اید")
+    elif user_data.get('self_active'):
         exp = user_data.get('expiration_date', 'نامشخص')
         await update.message.reply_text(f"✅ شما عضو فعال هستید\n\n📅 انقضا: {exp}")
+    elif user_data.get('admin_approved'):
+        await update.message.reply_text("⏳ در مرحله ورود اطلاعات\n\nشماره تلفن خود را وارد کنید")
+    elif user_data.get('request_sent'):
+        await update.message.reply_text("⏳ درخواست شما در انتظار تأیید است")
+    elif user_data.get('rejected'):
+        await update.message.reply_text("❌ درخواست شما رد شده است")
     else:
-        user_data = db.get_user(user_id_str)
-        if not user_data:
-            await update.message.reply_text("👤 شما ثبت‌نام نکرده‌اید")
-        elif user_data.get('admin_approved') and user_data.get('step'):
-            await update.message.reply_text("⏳ در مرحله ورود اطلاعات\n\nشماره تلفن خود را وارد کنید")
-        elif user_data.get('request_sent'):
-            await update.message.reply_text("⏳ درخواست شما در انتظار تأیید است")
-        elif user_data.get('rejected'):
-            await update.message.reply_text("❌ درخواست شما رد شده است")
-        else:
-            await update.message.reply_text("👤 شما ثبت‌نام نکرده‌اید")
+        await update.message.reply_text("👤 وضعیت عضویت نامشخص")
+
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
@@ -6027,9 +6050,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✖ درخواست شما رد شده است")
         return
 
-    # چک کن کاربر فعال هست یا نه
-    if db.is_member_active(user_id_str):
-        # کاربر فعال - چک کن سلف‌بات در حال اجراست یا نه
+    if user_data.get('self_active'):
+        # بررسی انقضا
+        expiration_date = user_data.get('expiration_date')
+        if expiration_date:
+            try:
+                exp_date = datetime.strptime(expiration_date, '%Y-%m-%d')
+                if exp_date < datetime.now():
+                    db.update_user(user_id_str, self_active=0)
+                    await update.message.reply_text(
+                        "⚠️ عضویت شما منقضی شده است!\n\n"
+                        "لطفاً برای تمدید با ادمین تماس بگیرید."
+                    )
+                    return
+            except:
+                pass
+        
+        # راه‌اندازی سلف‌بات اگر نیاز باشد
         if user_id_str not in selfbot_managers:
             session_file = user_data.get('session_file')
             if session_file and os.path.exists(session_file):
@@ -6039,6 +6076,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text("🚀 سلف‌بات فعال شد")
                 else:
                     await update.message.reply_text("⚠️ خطا در شروع سلف‌بات")
+            else:
+                await update.message.reply_text("⚠️ فایل سشن یافت نشد. لطفاً مجدداً ثبت‌نام کنید.")
         else:
             await update.message.reply_text("✅ سلف‌بات در حال اجراست")
         
@@ -6136,7 +6175,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                           self_active=1,
                           session_file=session_path,
                           expiration_date=expiration_date,
-                          step=None)
+                          step=None,
+                          last_active=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
             
             await update.message.reply_text(
                 f"🎉 عضویت کامل شد!\n\n"
@@ -6202,7 +6242,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                           self_active=1,
                           session_file=session_path,
                           expiration_date=expiration_date,
-                          step=None)
+                          step=None,
+                          last_active=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
             
             await update.message.reply_text(
                 f"🎉 عضویت کامل شد!\n\n"
@@ -6238,6 +6279,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("لطفاً روی دکمه عضویت کلیک کنید")
 
+
 async def check_session_files():
     print("\n" + "=" * 60)
     print("🔍 بررسی فایل‌های سشن...")
@@ -6259,6 +6301,7 @@ async def check_session_files():
         print(f"  ... و {len(session_files) - 5} فایل دیگر")
     
     print("=" * 60 + "\n")
+
 
 async def main():
     print("=" * 60)
@@ -6306,6 +6349,19 @@ async def main():
         user_id_str = user['user_id']
         session_file = user.get('session_file')
         
+        # بررسی انقضا
+        expiration_date = user.get('expiration_date')
+        if expiration_date:
+            try:
+                exp_date = datetime.strptime(expiration_date, '%Y-%m-%d')
+                if exp_date < datetime.now():
+                    db.update_user(user_id_str, self_active=0)
+                    print(f"  • کاربر {user_id_str}: عضویت منقضی شده ❌")
+                    fail_count += 1
+                    continue
+            except:
+                pass
+        
         if session_file and os.path.exists(session_file):
             print(f"  • کاربر {user_id_str}...", end=" ")
             
@@ -6329,6 +6385,20 @@ async def main():
     try:
         while True:
             await asyncio.sleep(3600)
+            # هر یک ساعت یکبار، انقضای کاربران رو بررسی کن
+            for user in db.get_active_users():
+                exp_date_str = user.get('expiration_date')
+                if exp_date_str:
+                    try:
+                        exp_date = datetime.strptime(exp_date_str, '%Y-%m-%d')
+                        if exp_date < datetime.now():
+                            db.update_user(user['user_id'], self_active=0)
+                            if user['user_id'] in selfbot_managers:
+                                await selfbot_managers[user['user_id']].stop()
+                                del selfbot_managers[user['user_id']]
+                            print(f"⏰ کاربر {user['user_id']} عضویت منقضی شد و غیرفعال گردید")
+                    except:
+                        pass
     except (KeyboardInterrupt, SystemExit):
         logger.info("در حال توقف...")
     finally:
@@ -6338,6 +6408,7 @@ async def main():
         await app.updater.stop()
         await app.stop()
         await app.shutdown()
+
 
 if __name__ == '__main__':
     asyncio.run(main())
