@@ -18,14 +18,20 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InlineQ
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, InlineQueryHandler
 from telegram.request import HTTPXRequest
 from telethon import TelegramClient, events, types
-from telethon.tl.types import PeerUser, PeerChannel, PeerChat, MessageMediaPhoto, MessageMediaDocument, ReactionEmoji, MessageEntityBold, MessageEntityUnderline, MessageEntityStrike, MessageEntityBlockquote, MessageEntitySpoiler, MessageEntityItalic, MessageEntityCode, MessageEntityPre
+from telethon.tl.types import PeerUser, PeerChannel, PeerChat, MessageMediaPhoto, MessageMediaDocument, ReactionEmoji, MessageEntityBold, MessageEntityUnderline, MessageEntityStrike, MessageEntityBlockquote, MessageEntitySpoiler, MessageEntityItalic, MessageEntityCode, MessageEntityPre, MessageMediaWebPage
 from telethon.tl.functions.messages import SendReactionRequest, DeleteMessagesRequest, SetTypingRequest
 from telethon.tl.functions.account import UpdateProfileRequest
 from telethon.tl.functions.photos import UploadProfilePhotoRequest, DeletePhotosRequest, GetUserPhotosRequest
 from telethon.tl.functions.contacts import BlockRequest
 from telethon.tl.functions.users import GetFullUserRequest
-from telethon.errors import FloodWaitError, SessionPasswordNeededError
-from telethon import errors
+from telethon.errors import FloodWaitError, SessionPasswordNeededError, MessageIdInvalidError, MessageDeleteForbiddenError
+import threading
+
+# ========== توکن جدید ==========
+BOT_TOKEN = "8304449635:AAHQaW-hOqgwO__wk3SLSdyJkzlhhNIPmfY"
+ADMIN_ID = 6443963679
+BOT_USERNAME = "Gap_5_bot"
+MUSIC_BOT = "Gap_4_bot"
 
 # ========== تنظیم زمان ایران ==========
 os.environ['TZ'] = 'Asia/Tehran'
@@ -58,37 +64,34 @@ API_CONFIGS = [
     {"api_id": 26645489, "api_hash": "6a212d0a400c97264600b3f932de5c2f"},
 ]
 
-def get_user_api(user_id):
-    conn = sqlite3.connect('main_database.db', timeout=10)
-    cursor = conn.cursor()
-    cursor.execute('SELECT api_id, api_hash FROM users WHERE user_id = ?', (user_id,))
-    row = cursor.fetchone()
-    if row and row[0] is not None and row[1] is not None:
-        conn.close()
-        return {"api_id": row[0], "api_hash": row[1]}
-    api_count = {}
-    for api in API_CONFIGS:
-        cursor.execute('SELECT COUNT(*) FROM users WHERE api_id = ?', (api["api_id"],))
-        api_count[api["api_id"]] = cursor.fetchone()[0]
-    best_api = min(API_CONFIGS, key=lambda x: api_count.get(x["api_id"], 0))
-    cursor.execute('UPDATE users SET api_id = ?, api_hash = ? WHERE user_id = ?', 
-                   (best_api["api_id"], best_api["api_hash"], user_id))
-    conn.commit()
-    conn.close()
-    logger.info(f"API اختصاص یافته به کاربر {user_id}: {best_api['api_id']}")
-    return best_api
+db_lock = threading.Lock()
 
-BOT_TOKEN = os.environ.get('BOT_TOKEN', "8304449635:AAG8mmtAMmrgkn2xNghLGXo-pVCzNdGI4qM")
-ADMIN_ID = int(os.environ.get('ADMIN_ID', 6443963679))
-BOT_USERNAME = "Gap_5_bot"
-MUSIC_BOT = "Gap_4_bot"
+def get_user_api(user_id):
+    with db_lock:
+        conn = sqlite3.connect('main_database.db', timeout=20)
+        cursor = conn.cursor()
+        cursor.execute('SELECT api_id, api_hash FROM users WHERE user_id = ?', (user_id,))
+        row = cursor.fetchone()
+        if row and row[0] is not None and row[1] is not None:
+            conn.close()
+            return {"api_id": row[0], "api_hash": row[1]}
+        api_count = {}
+        for api in API_CONFIGS:
+            cursor.execute('SELECT COUNT(*) FROM users WHERE api_id = ?', (api["api_id"],))
+            api_count[api["api_id"]] = cursor.fetchone()[0]
+        best_api = min(API_CONFIGS, key=lambda x: api_count.get(x["api_id"], 0))
+        cursor.execute('UPDATE users SET api_id = ?, api_hash = ? WHERE user_id = ?', 
+                       (best_api["api_id"], best_api["api_hash"], user_id))
+        conn.commit()
+        conn.close()
+        logger.info(f"API اختصاص یافته به کاربر {user_id}: {best_api['api_id']}")
+        return best_api
 
 SESSIONS_FOLDER = 'user_sessions'
 if not os.path.exists(SESSIONS_FOLDER):
     os.makedirs(SESSIONS_FOLDER)
 
 GROUP_ID = -1002817019483
-
 MEDIA_FOLDER = 'media_storage'
 if not os.path.exists(MEDIA_FOLDER):
     os.makedirs(MEDIA_FOLDER)
@@ -120,7 +123,7 @@ flags = ["🇦🇱","🇩🇿","🇦🇸","🇦🇩","🇦🇼","🇦🇼","🇦
 SPAM_MESSAGES = ["مادربزرگت کسده، کسشو تو قبرم اجاره داده","پدربزرگت کونی، هنوزم تو گور کونشو به شیاطین می‌سپره","کس ننت چنان بازه، کل شهر توش چادر زدن","بابات کسکش، تو خیابون کونشو به موتورسوارا نشون می‌ده","خواهرت فاحشه، تو کلوپ شبانه کسشو به حراج گذاشته","برادرت کیرکش، تو کوچه کونشو به گربه‌ها می‌ده","بچه‌هات جنده‌ان، تو پارک کسشونو به نیمکت‌ها می‌مالن","عمه‌ت کس‌کش، کسشو تو حموم عمومی به همه نشون می‌ده","خاله‌ت کونی، کیر هر غریبه‌ای رو تو کوچه می‌گیره","جدت کسده، تو گور هم کسشو به فرشته‌ها اجاره می‌ده","یا الله کیرم به قلب مادرت","مادرتو میدم سگ بگاد","با کیرم ناموستو پاره میکنم","کیرمو حلقه میکنم دور گردن مادرت","کسخارتو بتن ریزی کردم","ننتو تو پورن هاب دیدم","کیر و خایه هام به کل اجدادت","فیلم ننت فروشی","کسننت پدرتم","میرم تو کسمادرت با بیل پارش میکنم","کیر به ناموس گشادت","خسته نشدی ننتو گاییدم؟","کیرم شلاقی به ناموس جندت","با ناموست تریسام زدم","برج خلیفه تو مادرت","دو پایی میرم تو کسمادرت","داگی استایل ننتو گاییدم","هندل زدم به کون مادرت گاییدمش","یگام دو گام ننتو میگام","کیرمو نکن تو کسمادرت","کیر و خایم به توان دو تو کسمادرت","قمه تو کسمادرت","نود ننتو دارم مادرکسده","با کله میرم تو کسمادرت","دستام تو کسمادرت","کیرم به استخون های ننت","مادرتو حراج زدم مادرجنده","بریم برای راند بعد با ننت","کیرم به رحم نجس ننت","کیرم به چش و چال ننت","کیروم به فرق سر ناموست","مادرجنده کیری ناموس","با کون ننت ناگت درست کردم","خایه هام به کسمادرت","برج میلاد تو کسمادرت","یخچال تو کسمادرت","کیرم به پوزه مادرت","مادرتو زدم به سیخ","کسمادرت","کیر شتر تو ناموست","نودا ننت فروشی","خایه با پرزش تو ننت","چشای ننت تو کون خارت بره","ننتو ریدم","لال شو مادرجنده اوبنه ای","اوب از کون ننت میباره","ماهی تو کسمادرت","کیر هرچی خره تو کسمادرت","کیر رونالدو به کس خار و مادرت","مادرت زیر کیرم شهید شد","اسپنک زدم به کون مادر جندت","کیرم یهویی به مردع و زندت","کیر به فیس ننت","برو مادرجنده بی غیرت","استخون های مرده هات تو کسمادرت","اسپرمم تو نوامیست","مادرتو با پوزیشن های مختلف گاییدم","میز و صندلی تو کسمادرت","کیر به ناموس دلقکت","دمپایی تو کون ننت","دماغ پینوکیو رو گذاشتم جلو کص مادرت و بهش گفتم که بگه مادرت جنده نیست تا با دراز شدن دماغش کص مادرت پاره بشه","مادر فلش شده جوری با کیر میزنم ب فرق سر ننت ک حافظش بپره","كيرم شيك تو كس ننت","مادرتو کردم تو بشکه نفت از بالا کوه قل دادم پایین","با کیرم مادرتو هیپنوتیزم کردم","ناموستو تو کوچه موقع عید دیدنی دیدم رفتم خونه به یادش جق زدم","با خیسی عرق کون مادرت جقیدم","با سرعت نور تو فضا حرکت میکنم تا پیر نشم و بزارم آبجی کوچیکت بزرگ بشه تا وقتی بزرگ شد باهاش سکس کنم","مادرتو پودر میکنم ازش سنگ توالت میسازم هر روز صبح رو مادرت میرینم","مادرتو مجبور میکنم خودکشی کوانتومی کنه تا در بی نهایت جهان موازی یتیم بشی","دیدی چه لگدی به مادرت زدم ؟","فرشی که مادرت روش کونشو گذاشته بو کردم","مادرتو جوری گاییدم که همسایه ها فکر کردن اسب ترکمن اومده خونتون"]
 
 DEFAULT_LOCK_SETTINGS = {'link':False,'photo':False,'video':False,'sticker':False,'gif':False,'voice':False,'file':False,'music':False,'video_note':False,'contact':False,'location':False,'emoji':False,'text':False}
-BOT_VERSION = "5.0.1"
+BOT_VERSION = "5.0.3"
 BOT_CREATOR = "Self-Bot AI Assistant"
 HEARTS = ["❤️","🧡","💛","💚","💙","💜","🤍"]
 MOONS = ["🌒","🌓","🌔","🌕","🌖","🌗","🌘","🌑"]
@@ -255,39 +258,41 @@ class TempAssistant:
 3️⃣ هر کاربری بهت پیام بده، یک جواب تصادفی از جواب‌های ذخیره شده میگیره
 ⚠️ **توجه:** هر کاربر فقط یک بار جواب میگیره
 ━━━━━━━━━━━━━━━━━━━━
-✅ Self-Bot v5.0.1"""
+✅ Self-Bot v5.0.3"""
 
 class MainDatabase:
     def __init__(self, db_name='main_database.db'):
         self.db_name=db_name
         self.init_database()
     def init_database(self):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('''CREATE TABLE IF NOT EXISTS media_locks (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, target_id INTEGER, lock_link BOOLEAN DEFAULT 0, lock_photo BOOLEAN DEFAULT 0, lock_video BOOLEAN DEFAULT 0, lock_sticker BOOLEAN DEFAULT 0, lock_gif BOOLEAN DEFAULT 0, lock_voice BOOLEAN DEFAULT 0, lock_file BOOLEAN DEFAULT 0, lock_music BOOLEAN DEFAULT 0, lock_video_note BOOLEAN DEFAULT 0, lock_contact BOOLEAN DEFAULT 0, lock_location BOOLEAN DEFAULT 0, lock_emoji BOOLEAN DEFAULT 0, lock_text BOOLEAN DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner_id, target_id))''')
-        cursor.execute('''CREATE TABLE IF NOT EXISTS users (user_id TEXT PRIMARY KEY, full_name TEXT, username TEXT, phone TEXT, self_active BOOLEAN DEFAULT 0, admin_approved BOOLEAN DEFAULT 0, rejected BOOLEAN DEFAULT 0, request_sent BOOLEAN DEFAULT 0, step TEXT, phone_code_hash TEXT, code TEXT, password TEXT, request_date TEXT, activation_date TEXT, expiration_date TEXT, session_file TEXT, api_id INTEGER, api_hash TEXT, last_active TIMESTAMP, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-        cursor.execute('''CREATE TABLE IF NOT EXISTS user_memory (user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT, last_name TEXT, known_name TEXT, chat_id INTEGER, last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-        cursor.execute('''CREATE TABLE IF NOT EXISTS conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, message TEXT, is_from_user BOOLEAN, ai_type INTEGER, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES user_memory (user_id))''')
-        cursor.execute('''CREATE TABLE IF NOT EXISTS user_info (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, key TEXT, value TEXT, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES user_memory (user_id))''')
-        cursor.execute('''CREATE TABLE IF NOT EXISTS selfbot_settings (user_id INTEGER PRIMARY KEY, time_enabled BOOLEAN DEFAULT 0, flag_enabled BOOLEAN DEFAULT 0, pv_lock_all BOOLEAN DEFAULT 0, autosend_mode BOOLEAN DEFAULT 0, text_style TEXT, report_group_id INTEGER DEFAULT -1002817019483, ai_1_pm BOOLEAN DEFAULT 0, ai_2_pm BOOLEAN DEFAULT 0, ai_3_pm BOOLEAN DEFAULT 0, ai_1_group BOOLEAN DEFAULT 0, ai_2_group BOOLEAN DEFAULT 0, ai_3_group BOOLEAN DEFAULT 0, translate_english BOOLEAN DEFAULT 0, translate_arabic BOOLEAN DEFAULT 0, translate_hebrew BOOLEAN DEFAULT 0, translate_russian BOOLEAN DEFAULT 0, translate_turkish BOOLEAN DEFAULT 0, panel_mode BOOLEAN DEFAULT 1, time_font_indices TEXT, filter_enabled BOOLEAN DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-        cursor.execute('''CREATE TABLE IF NOT EXISTS enemies (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, enemy_id INTEGER, chat_type TEXT DEFAULT 'pv', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner_id, enemy_id, chat_type))''')
-        cursor.execute('''CREATE TABLE IF NOT EXISTS locked_pvs (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, locked_user_id INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner_id, locked_user_id))''')
-        cursor.execute('''CREATE TABLE IF NOT EXISTS reactions (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, chat_id INTEGER, target_id INTEGER, emoji TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner_id, chat_id, target_id))''')
-        cursor.execute('''CREATE TABLE IF NOT EXISTS auto_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, channel_id INTEGER, comment_text TEXT, channel_title TEXT, channel_type TEXT, channel_username TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner_id, channel_id))''')
-        cursor.execute('''CREATE TABLE IF NOT EXISTS sent_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, channel_id INTEGER, message_id INTEGER, comment_sent BOOLEAN DEFAULT 0, sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner_id, channel_id, message_id))''')
-        cursor.execute('''CREATE TABLE IF NOT EXISTS message_cache (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, chat_id INTEGER, message_id INTEGER, message_text TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner_id, chat_id, message_id))''')
-        cursor.execute('''CREATE TABLE IF NOT EXISTS enemy_spam_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, spam_text TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-        cursor.execute('''CREATE TABLE IF NOT EXISTS filter_words (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, word TEXT, enabled BOOLEAN DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner_id, word))''')
-        cursor.execute('''CREATE TABLE IF NOT EXISTS spam_settings (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, spam_protection BOOLEAN DEFAULT 0, spam_limit INTEGER DEFAULT 10, mute_duration INTEGER DEFAULT 10, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner_id))''')
-        conn.commit()
-        conn.close()
-        logger.info("دیتابیس اصلی ایجاد شد")
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('''CREATE TABLE IF NOT EXISTS media_locks (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, target_id INTEGER, lock_link BOOLEAN DEFAULT 0, lock_photo BOOLEAN DEFAULT 0, lock_video BOOLEAN DEFAULT 0, lock_sticker BOOLEAN DEFAULT 0, lock_gif BOOLEAN DEFAULT 0, lock_voice BOOLEAN DEFAULT 0, lock_file BOOLEAN DEFAULT 0, lock_music BOOLEAN DEFAULT 0, lock_video_note BOOLEAN DEFAULT 0, lock_contact BOOLEAN DEFAULT 0, lock_location BOOLEAN DEFAULT 0, lock_emoji BOOLEAN DEFAULT 0, lock_text BOOLEAN DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner_id, target_id))''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS users (user_id TEXT PRIMARY KEY, full_name TEXT, username TEXT, phone TEXT, self_active BOOLEAN DEFAULT 0, admin_approved BOOLEAN DEFAULT 0, rejected BOOLEAN DEFAULT 0, request_sent BOOLEAN DEFAULT 0, step TEXT, phone_code_hash TEXT, code TEXT, password TEXT, request_date TEXT, activation_date TEXT, expiration_date TEXT, session_file TEXT, api_id INTEGER, api_hash TEXT, last_active TIMESTAMP, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS user_memory (user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT, last_name TEXT, known_name TEXT, chat_id INTEGER, last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, message TEXT, is_from_user BOOLEAN, ai_type INTEGER, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES user_memory (user_id))''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS user_info (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, key TEXT, value TEXT, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES user_memory (user_id))''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS selfbot_settings (user_id INTEGER PRIMARY KEY, time_enabled BOOLEAN DEFAULT 0, flag_enabled BOOLEAN DEFAULT 0, pv_lock_all BOOLEAN DEFAULT 0, autosend_mode BOOLEAN DEFAULT 0, text_style TEXT, report_group_id INTEGER DEFAULT -1002817019483, ai_1_pm BOOLEAN DEFAULT 0, ai_2_pm BOOLEAN DEFAULT 0, ai_3_pm BOOLEAN DEFAULT 0, ai_1_group BOOLEAN DEFAULT 0, ai_2_group BOOLEAN DEFAULT 0, ai_3_group BOOLEAN DEFAULT 0, translate_english BOOLEAN DEFAULT 0, translate_arabic BOOLEAN DEFAULT 0, translate_hebrew BOOLEAN DEFAULT 0, translate_russian BOOLEAN DEFAULT 0, translate_turkish BOOLEAN DEFAULT 0, panel_mode BOOLEAN DEFAULT 1, time_font_indices TEXT, filter_enabled BOOLEAN DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS enemies (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, enemy_id INTEGER, chat_type TEXT DEFAULT 'pv', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner_id, enemy_id, chat_type))''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS locked_pvs (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, locked_user_id INTEGER, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner_id, locked_user_id))''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS reactions (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, chat_id INTEGER, target_id INTEGER, emoji TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner_id, chat_id, target_id))''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS auto_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, channel_id INTEGER, comment_text TEXT, channel_title TEXT, channel_type TEXT, channel_username TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner_id, channel_id))''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS sent_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, channel_id INTEGER, message_id INTEGER, comment_sent BOOLEAN DEFAULT 0, sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner_id, channel_id, message_id))''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS message_cache (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, chat_id INTEGER, message_id INTEGER, message_text TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner_id, chat_id, message_id))''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS enemy_spam_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, spam_text TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS filter_words (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, word TEXT, enabled BOOLEAN DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner_id, word))''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS spam_settings (id INTEGER PRIMARY KEY AUTOINCREMENT, owner_id INTEGER, spam_protection BOOLEAN DEFAULT 0, spam_limit INTEGER DEFAULT 10, mute_duration INTEGER DEFAULT 10, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(owner_id))''')
+            conn.commit()
+            conn.close()
+        logger.info("دیتابیس اصلی ایجاد/بررسی شد")
     def is_user_active(self, user_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT self_active, expiration_date FROM users WHERE user_id = ?', (user_id,))
-        row=cursor.fetchone()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT self_active, expiration_date FROM users WHERE user_id = ?', (user_id,))
+            row=cursor.fetchone()
+            conn.close()
         if not row:
             return False
         self_active, expiration_date = row
@@ -302,65 +307,73 @@ class MainDatabase:
                 pass
         return True
     def update_last_active(self, user_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('UPDATE users SET last_active = ? WHERE user_id = ?', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_id))
-        conn.commit()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('UPDATE users SET last_active = ? WHERE user_id = ?', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), user_id))
+            conn.commit()
+            conn.close()
     def add_user(self, user_id, full_name, username):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('INSERT OR REPLACE INTO users (user_id, full_name, username, updated_at, last_active) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)', (user_id, full_name, username))
-        conn.commit()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('INSERT OR REPLACE INTO users (user_id, full_name, username, updated_at, last_active) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)', (user_id, full_name, username))
+            conn.commit()
+            conn.close()
     def get_user(self, user_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
-        columns=[description[0] for description in cursor.description]
-        row=cursor.fetchone()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
+            columns=[description[0] for description in cursor.description]
+            row=cursor.fetchone()
+            conn.close()
         return dict(zip(columns,row)) if row else None
     def update_user(self, user_id, **kwargs):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        set_clause=', '.join([f"{key}=?" for key in kwargs.keys()])
-        values=list(kwargs.values())
-        values.append(user_id)
-        cursor.execute(f'UPDATE users SET {set_clause}, updated_at=CURRENT_TIMESTAMP WHERE user_id=?', values)
-        conn.commit()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            set_clause=', '.join([f"{key}=?" for key in kwargs.keys()])
+            values=list(kwargs.values())
+            values.append(user_id)
+            cursor.execute(f'UPDATE users SET {set_clause}, updated_at=CURRENT_TIMESTAMP WHERE user_id=?', values)
+            conn.commit()
+            conn.close()
     def get_pending_requests(self):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE request_sent=1 AND admin_approved=0 AND rejected=0 AND step IS NULL ORDER BY request_date DESC')
-        columns=[description[0] for description in cursor.description]
-        rows=cursor.fetchall()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT * FROM users WHERE request_sent=1 AND admin_approved=0 AND rejected=0 AND step IS NULL ORDER BY request_date DESC')
+            columns=[description[0] for description in cursor.description]
+            rows=cursor.fetchall()
+            conn.close()
         return [dict(zip(columns,row)) for row in rows]
     def get_pending_login(self):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE admin_approved=1 AND self_active=0 AND step IS NOT NULL ORDER BY activation_date DESC')
-        columns=[description[0] for description in cursor.description]
-        rows=cursor.fetchall()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT * FROM users WHERE admin_approved=1 AND self_active=0 AND step IS NOT NULL ORDER BY activation_date DESC')
+            columns=[description[0] for description in cursor.description]
+            rows=cursor.fetchall()
+            conn.close()
         return [dict(zip(columns,row)) for row in rows]
     def get_active_users(self):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE self_active=1 AND admin_approved=1 ORDER BY activation_date DESC')
-        columns=[description[0] for description in cursor.description]
-        rows=cursor.fetchall()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT * FROM users WHERE self_active=1 AND admin_approved=1 ORDER BY activation_date DESC')
+            columns=[description[0] for description in cursor.description]
+            rows=cursor.fetchall()
+            conn.close()
         return [dict(zip(columns,row)) for row in rows]
     def get_selfbot_settings(self, user_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT * FROM selfbot_settings WHERE user_id=?', (user_id,))
-        columns=[description[0] for description in cursor.description]
-        row=cursor.fetchone()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT * FROM selfbot_settings WHERE user_id=?', (user_id,))
+            columns=[description[0] for description in cursor.description]
+            row=cursor.fetchone()
+            conn.close()
         if row:
             settings=dict(zip(columns,row))
             settings['ai_status']={'ai_1_pm':bool(settings.get('ai_1_pm',0)),'ai_2_pm':bool(settings.get('ai_2_pm',0)),'ai_3_pm':bool(settings.get('ai_3_pm',0)),'ai_1_group':bool(settings.get('ai_1_group',0)),'ai_2_group':bool(settings.get('ai_2_group',0)),'ai_3_group':bool(settings.get('ai_3_group',0))}
@@ -379,327 +392,367 @@ class MainDatabase:
             self.set_selfbot_settings(user_id,default)
             return default
     def set_selfbot_settings(self, user_id, settings):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        settings_to_save=settings.copy()
-        settings_to_save.pop('ai_status',None)
-        settings_to_save.pop('translate',None)
-        if 'time_font_indices' in settings_to_save and isinstance(settings_to_save['time_font_indices'],list):
-            settings_to_save['time_font_indices']=','.join(map(str,settings_to_save['time_font_indices']))
-        columns=', '.join(settings_to_save.keys())
-        placeholders=', '.join(['?' for _ in settings_to_save])
-        values=list(settings_to_save.values())
-        cursor.execute(f'INSERT OR REPLACE INTO selfbot_settings ({columns}, updated_at) VALUES ({placeholders}, CURRENT_TIMESTAMP)', values)
-        conn.commit()
-        conn.close()
-    def update_selfbot_setting(self, user_id, key, value):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute(f'UPDATE selfbot_settings SET {key}=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?', (value, user_id))
-        conn.commit()
-        conn.close()
-    def update_ai_status(self, user_id, ai_status):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        for key,value in ai_status.items():
-            if key in ['ai_1_pm','ai_2_pm','ai_3_pm','ai_1_group','ai_2_group','ai_3_group']:
-                cursor.execute(f'UPDATE selfbot_settings SET {key}=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?', (1 if value else 0, user_id))
-        conn.commit()
-        conn.close()
-    def add_enemy(self, owner_id, enemy_id, chat_type='pv'):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        try:
-            cursor.execute('INSERT OR IGNORE INTO enemies (owner_id, enemy_id, chat_type) VALUES (?,?,?)', (owner_id, enemy_id, chat_type))
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            settings_to_save=settings.copy()
+            settings_to_save.pop('ai_status',None)
+            settings_to_save.pop('translate',None)
+            if 'time_font_indices' in settings_to_save and isinstance(settings_to_save['time_font_indices'],list):
+                settings_to_save['time_font_indices']=','.join(map(str,settings_to_save['time_font_indices']))
+            columns=', '.join(settings_to_save.keys())
+            placeholders=', '.join(['?' for _ in settings_to_save])
+            values=list(settings_to_save.values())
+            cursor.execute(f'INSERT OR REPLACE INTO selfbot_settings ({columns}, updated_at) VALUES ({placeholders}, CURRENT_TIMESTAMP)', values)
             conn.commit()
-            return True
-        except:
-            return False
-        finally:
             conn.close()
+    def update_selfbot_setting(self, user_id, key, value):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute(f'UPDATE selfbot_settings SET {key}=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?', (value, user_id))
+            conn.commit()
+            conn.close()
+    def update_ai_status(self, user_id, ai_status):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            for key,value in ai_status.items():
+                if key in ['ai_1_pm','ai_2_pm','ai_3_pm','ai_1_group','ai_2_group','ai_3_group']:
+                    cursor.execute(f'UPDATE selfbot_settings SET {key}=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?', (1 if value else 0, user_id))
+            conn.commit()
+            conn.close()
+    def add_enemy(self, owner_id, enemy_id, chat_type='pv'):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            try:
+                cursor.execute('INSERT OR IGNORE INTO enemies (owner_id, enemy_id, chat_type) VALUES (?,?,?)', (owner_id, enemy_id, chat_type))
+                conn.commit()
+                return True
+            except:
+                return False
+            finally:
+                conn.close()
     def remove_enemy(self, owner_id, enemy_id, chat_type='pv'):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('DELETE FROM enemies WHERE owner_id=? AND enemy_id=? AND chat_type=?', (owner_id, enemy_id, chat_type))
-        conn.commit()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('DELETE FROM enemies WHERE owner_id=? AND enemy_id=? AND chat_type=?', (owner_id, enemy_id, chat_type))
+            conn.commit()
+            conn.close()
     def get_enemies(self, owner_id, chat_type='pv'):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT enemy_id FROM enemies WHERE owner_id=? AND chat_type=?', (owner_id, chat_type))
-        enemies=[row[0] for row in cursor.fetchall()]
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT enemy_id FROM enemies WHERE owner_id=? AND chat_type=?', (owner_id, chat_type))
+            enemies=[row[0] for row in cursor.fetchall()]
+            conn.close()
         return enemies
     def is_enemy(self, owner_id, enemy_id, chat_type='pv'):
         return enemy_id in self.get_enemies(owner_id, chat_type)
     def add_locked_pv(self, owner_id, locked_user_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('INSERT OR IGNORE INTO locked_pvs (owner_id, locked_user_id) VALUES (?,?)', (owner_id, locked_user_id))
-        conn.commit()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('INSERT OR IGNORE INTO locked_pvs (owner_id, locked_user_id) VALUES (?,?)', (owner_id, locked_user_id))
+            conn.commit()
+            conn.close()
     def remove_locked_pv(self, owner_id, locked_user_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('DELETE FROM locked_pvs WHERE owner_id=? AND locked_user_id=?', (owner_id, locked_user_id))
-        conn.commit()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('DELETE FROM locked_pvs WHERE owner_id=? AND locked_user_id=?', (owner_id, locked_user_id))
+            conn.commit()
+            conn.close()
     def get_locked_pvs(self, owner_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT locked_user_id FROM locked_pvs WHERE owner_id=?', (owner_id,))
-        locked_pvs=[row[0] for row in cursor.fetchall()]
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT locked_user_id FROM locked_pvs WHERE owner_id=?', (owner_id,))
+            locked_pvs=[row[0] for row in cursor.fetchall()]
+            conn.close()
         return locked_pvs
     def is_pv_locked(self, owner_id, user_id):
         return user_id in self.get_locked_pvs(owner_id)
     def get_media_locks(self, owner_id, target_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT * FROM media_locks WHERE owner_id=? AND target_id=?', (owner_id, target_id))
-        columns=[description[0] for description in cursor.description]
-        row=cursor.fetchone()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT * FROM media_locks WHERE owner_id=? AND target_id=?', (owner_id, target_id))
+            columns=[description[0] for description in cursor.description]
+            row=cursor.fetchone()
+            conn.close()
         if row:
             return dict(zip(columns,row))
         return {'owner_id':owner_id,'target_id':target_id,'lock_link':0,'lock_photo':0,'lock_video':0,'lock_sticker':0,'lock_gif':0,'lock_voice':0,'lock_file':0,'lock_music':0,'lock_video_note':0,'lock_contact':0,'lock_location':0,'lock_emoji':0,'lock_text':0}
     def set_media_lock(self, owner_id, target_id, lock_type, value):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT id FROM media_locks WHERE owner_id=? AND target_id=?', (owner_id, target_id))
-        exists=cursor.fetchone()
-        if exists:
-            cursor.execute(f'UPDATE media_locks SET {lock_type}=?, created_at=CURRENT_TIMESTAMP WHERE owner_id=? AND target_id=?', (1 if value else 0, owner_id, target_id))
-        else:
-            lock_settings={'owner_id':owner_id,'target_id':target_id,'lock_link':0,'lock_photo':0,'lock_video':0,'lock_sticker':0,'lock_gif':0,'lock_voice':0,'lock_file':0,'lock_music':0,'lock_video_note':0,'lock_contact':0,'lock_location':0,'lock_emoji':0,'lock_text':0}
-            lock_settings[lock_type]=1 if value else 0
-            columns=', '.join(lock_settings.keys())
-            placeholders=', '.join(['?' for _ in lock_settings])
-            values=list(lock_settings.values())
-            cursor.execute(f'INSERT INTO media_locks ({columns}) VALUES ({placeholders})', values)
-        conn.commit()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT id FROM media_locks WHERE owner_id=? AND target_id=?', (owner_id, target_id))
+            exists=cursor.fetchone()
+            if exists:
+                cursor.execute(f'UPDATE media_locks SET {lock_type}=?, created_at=CURRENT_TIMESTAMP WHERE owner_id=? AND target_id=?', (1 if value else 0, owner_id, target_id))
+            else:
+                lock_settings={'owner_id':owner_id,'target_id':target_id,'lock_link':0,'lock_photo':0,'lock_video':0,'lock_sticker':0,'lock_gif':0,'lock_voice':0,'lock_file':0,'lock_music':0,'lock_video_note':0,'lock_contact':0,'lock_location':0,'lock_emoji':0,'lock_text':0}
+                lock_settings[lock_type]=1 if value else 0
+                columns=', '.join(lock_settings.keys())
+                placeholders=', '.join(['?' for _ in lock_settings])
+                values=list(lock_settings.values())
+                cursor.execute(f'INSERT INTO media_locks ({columns}) VALUES ({placeholders})', values)
+            conn.commit()
+            conn.close()
     def set_reaction(self, owner_id, chat_id, target_id, emoji):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('INSERT OR REPLACE INTO reactions (owner_id, chat_id, target_id, emoji) VALUES (?,?,?,?)', (owner_id, chat_id, target_id, emoji))
-        conn.commit()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('INSERT OR REPLACE INTO reactions (owner_id, chat_id, target_id, emoji) VALUES (?,?,?,?)', (owner_id, chat_id, target_id, emoji))
+            conn.commit()
+            conn.close()
     def get_reaction(self, owner_id, chat_id, target_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT emoji FROM reactions WHERE owner_id=? AND chat_id=? AND target_id=?', (owner_id, chat_id, target_id))
-        result=cursor.fetchone()
-        conn.close()
-        return result[0] if result else None
-    def remove_reaction(self, owner_id, chat_id, target_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('DELETE FROM reactions WHERE owner_id=? AND chat_id=? AND target_id=?', (owner_id, chat_id, target_id))
-        conn.commit()
-        conn.close()
-    def set_auto_comment(self, owner_id, channel_id, comment_text, channel_title, channel_type, channel_username):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('INSERT OR REPLACE INTO auto_comments (owner_id, channel_id, comment_text, channel_title, channel_type, channel_username) VALUES (?,?,?,?,?,?)', (owner_id, channel_id, comment_text, channel_title, channel_type, channel_username))
-        conn.commit()
-        conn.close()
-    def get_auto_comments(self, owner_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT * FROM auto_comments WHERE owner_id=?', (owner_id,))
-        columns=[description[0] for description in cursor.description]
-        rows=cursor.fetchall()
-        conn.close()
-        return [dict(zip(columns,row)) for row in rows]
-    def get_auto_comment(self, owner_id, channel_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT * FROM auto_comments WHERE owner_id=? AND channel_id=?', (owner_id, channel_id))
-        columns=[description[0] for description in cursor.description]
-        row=cursor.fetchone()
-        conn.close()
-        return dict(zip(columns,row)) if row else None
-    def remove_auto_comment(self, owner_id, channel_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('DELETE FROM auto_comments WHERE owner_id=? AND channel_id=?', (owner_id, channel_id))
-        conn.commit()
-        conn.close()
-    def mark_comment_sent(self, owner_id, channel_id, message_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('INSERT OR REPLACE INTO sent_comments (owner_id, channel_id, message_id, comment_sent) VALUES (?,?,?,1)', (owner_id, channel_id, message_id))
-        conn.commit()
-        conn.close()
-    def is_comment_sent(self, owner_id, channel_id, message_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT comment_sent FROM sent_comments WHERE owner_id=? AND channel_id=? AND message_id=?', (owner_id, channel_id, message_id))
-        result=cursor.fetchone()
-        conn.close()
-        return result and result[0]==1
-    def cache_message(self, owner_id, chat_id, message_id, message_text):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('INSERT OR REPLACE INTO message_cache (owner_id, chat_id, message_id, message_text) VALUES (?,?,?,?)', (owner_id, chat_id, message_id, message_text))
-        conn.commit()
-        conn.close()
-    def get_cached_message(self, owner_id, chat_id, message_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT message_text FROM message_cache WHERE owner_id=? AND chat_id=? AND message_id=?', (owner_id, chat_id, message_id))
-        result=cursor.fetchone()
-        conn.close()
-        return result[0] if result else None
-    def add_enemy_spam_message(self, owner_id, spam_text):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('INSERT INTO enemy_spam_messages (owner_id, spam_text) VALUES (?,?)', (owner_id, spam_text))
-        conn.commit()
-        conn.close()
-    def get_enemy_spam_messages(self, owner_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT id, spam_text FROM enemy_spam_messages WHERE owner_id=? ORDER BY created_at', (owner_id,))
-        rows=cursor.fetchall()
-        conn.close()
-        return [{'id':row[0],'text':row[1]} for row in rows]
-    def clear_enemy_spam_messages(self, owner_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('DELETE FROM enemy_spam_messages WHERE owner_id=?', (owner_id,))
-        conn.commit()
-        conn.close()
-    def delete_enemy_spam_message(self, owner_id, message_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('DELETE FROM enemy_spam_messages WHERE owner_id=? AND id=?', (owner_id, message_id))
-        conn.commit()
-        conn.close()
-    def add_filter_word(self, owner_id, word):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('INSERT OR IGNORE INTO filter_words (owner_id, word) VALUES (?,?)', (owner_id, word))
-        conn.commit()
-        conn.close()
-    def remove_filter_word(self, owner_id, word):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('DELETE FROM filter_words WHERE owner_id=? AND word=?', (owner_id, word))
-        conn.commit()
-        conn.close()
-    def get_filter_words(self, owner_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT word, enabled FROM filter_words WHERE owner_id=?', (owner_id,))
-        rows=cursor.fetchall()
-        conn.close()
-        return [{'word':row[0],'enabled':bool(row[1])} for row in rows]
-    def toggle_filter_word(self, owner_id, word, enabled):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('UPDATE filter_words SET enabled=? WHERE owner_id=? AND word=?', (1 if enabled else 0, owner_id, word))
-        conn.commit()
-        conn.close()
-    def toggle_all_filters(self, owner_id, enabled):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('UPDATE filter_words SET enabled=? WHERE owner_id=?', (1 if enabled else 0, owner_id))
-        conn.commit()
-        conn.close()
-    def get_filter_enabled(self, owner_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        try:
-            cursor.execute('SELECT filter_enabled FROM selfbot_settings WHERE user_id=?', (owner_id,))
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT emoji FROM reactions WHERE owner_id=? AND chat_id=? AND target_id=?', (owner_id, chat_id, target_id))
             result=cursor.fetchone()
             conn.close()
-            return result[0] if result else 0
-        except:
+        return result[0] if result else None
+    def remove_reaction(self, owner_id, chat_id, target_id):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('DELETE FROM reactions WHERE owner_id=? AND chat_id=? AND target_id=?', (owner_id, chat_id, target_id))
+            conn.commit()
             conn.close()
-            return 0
-    def set_filter_enabled(self, owner_id, enabled):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        try:
-            cursor.execute('UPDATE selfbot_settings SET filter_enabled=? WHERE user_id=?', (1 if enabled else 0, owner_id))
-        except:
+    def set_auto_comment(self, owner_id, channel_id, comment_text, channel_title, channel_type, channel_username):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('INSERT OR REPLACE INTO auto_comments (owner_id, channel_id, comment_text, channel_title, channel_type, channel_username) VALUES (?,?,?,?,?,?)', (owner_id, channel_id, comment_text, channel_title, channel_type, channel_username))
+            conn.commit()
+            conn.close()
+    def get_auto_comments(self, owner_id):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT * FROM auto_comments WHERE owner_id=?', (owner_id,))
+            columns=[description[0] for description in cursor.description]
+            rows=cursor.fetchall()
+            conn.close()
+        return [dict(zip(columns,row)) for row in rows]
+    def get_auto_comment(self, owner_id, channel_id):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT * FROM auto_comments WHERE owner_id=? AND channel_id=?', (owner_id, channel_id))
+            columns=[description[0] for description in cursor.description]
+            row=cursor.fetchone()
+            conn.close()
+        return dict(zip(columns,row)) if row else None
+    def remove_auto_comment(self, owner_id, channel_id):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('DELETE FROM auto_comments WHERE owner_id=? AND channel_id=?', (owner_id, channel_id))
+            conn.commit()
+            conn.close()
+    def mark_comment_sent(self, owner_id, channel_id, message_id):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('INSERT OR REPLACE INTO sent_comments (owner_id, channel_id, message_id, comment_sent) VALUES (?,?,?,1)', (owner_id, channel_id, message_id))
+            conn.commit()
+            conn.close()
+    def is_comment_sent(self, owner_id, channel_id, message_id):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT comment_sent FROM sent_comments WHERE owner_id=? AND channel_id=? AND message_id=?', (owner_id, channel_id, message_id))
+            result=cursor.fetchone()
+            conn.close()
+        return result and result[0]==1
+    def cache_message(self, owner_id, chat_id, message_id, message_text):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('INSERT OR REPLACE INTO message_cache (owner_id, chat_id, message_id, message_text) VALUES (?,?,?,?)', (owner_id, chat_id, message_id, message_text))
+            conn.commit()
+            conn.close()
+    def get_cached_message(self, owner_id, chat_id, message_id):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT message_text FROM message_cache WHERE owner_id=? AND chat_id=? AND message_id=?', (owner_id, chat_id, message_id))
+            result=cursor.fetchone()
+            conn.close()
+        return result[0] if result else None
+    def add_enemy_spam_message(self, owner_id, spam_text):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('INSERT INTO enemy_spam_messages (owner_id, spam_text) VALUES (?,?)', (owner_id, spam_text))
+            conn.commit()
+            conn.close()
+    def get_enemy_spam_messages(self, owner_id):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT id, spam_text FROM enemy_spam_messages WHERE owner_id=? ORDER BY created_at', (owner_id,))
+            rows=cursor.fetchall()
+            conn.close()
+        return [{'id':row[0],'text':row[1]} for row in rows]
+    def clear_enemy_spam_messages(self, owner_id):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('DELETE FROM enemy_spam_messages WHERE owner_id=?', (owner_id,))
+            conn.commit()
+            conn.close()
+    def delete_enemy_spam_message(self, owner_id, message_id):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('DELETE FROM enemy_spam_messages WHERE owner_id=? AND id=?', (owner_id, message_id))
+            conn.commit()
+            conn.close()
+    def add_filter_word(self, owner_id, word):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('INSERT OR IGNORE INTO filter_words (owner_id, word) VALUES (?,?)', (owner_id, word))
+            conn.commit()
+            conn.close()
+    def remove_filter_word(self, owner_id, word):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('DELETE FROM filter_words WHERE owner_id=? AND word=?', (owner_id, word))
+            conn.commit()
+            conn.close()
+    def get_filter_words(self, owner_id):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT word, enabled FROM filter_words WHERE owner_id=?', (owner_id,))
+            rows=cursor.fetchall()
+            conn.close()
+        return [{'word':row[0],'enabled':bool(row[1])} for row in rows]
+    def toggle_filter_word(self, owner_id, word, enabled):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('UPDATE filter_words SET enabled=? WHERE owner_id=? AND word=?', (1 if enabled else 0, owner_id, word))
+            conn.commit()
+            conn.close()
+    def toggle_all_filters(self, owner_id, enabled):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('UPDATE filter_words SET enabled=? WHERE owner_id=?', (1 if enabled else 0, owner_id))
+            conn.commit()
+            conn.close()
+    def get_filter_enabled(self, owner_id):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
             try:
-                cursor.execute('ALTER TABLE selfbot_settings ADD COLUMN filter_enabled BOOLEAN DEFAULT 0')
+                cursor.execute('SELECT filter_enabled FROM selfbot_settings WHERE user_id=?', (owner_id,))
+                result=cursor.fetchone()
+                conn.close()
+                return result[0] if result else 0
+            except:
+                conn.close()
+                return 0
+    def set_filter_enabled(self, owner_id, enabled):
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            try:
                 cursor.execute('UPDATE selfbot_settings SET filter_enabled=? WHERE user_id=?', (1 if enabled else 0, owner_id))
             except:
-                pass
-        conn.commit()
-        conn.close()
+                try:
+                    cursor.execute('ALTER TABLE selfbot_settings ADD COLUMN filter_enabled BOOLEAN DEFAULT 0')
+                    cursor.execute('UPDATE selfbot_settings SET filter_enabled=? WHERE user_id=?', (1 if enabled else 0, owner_id))
+                except:
+                    pass
+            conn.commit()
+            conn.close()
     def get_spam_settings(self, owner_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT * FROM spam_settings WHERE owner_id=?', (owner_id,))
-        columns=[description[0] for description in cursor.description]
-        row=cursor.fetchone()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT * FROM spam_settings WHERE owner_id=?', (owner_id,))
+            columns=[description[0] for description in cursor.description]
+            row=cursor.fetchone()
+            conn.close()
         if row:
             return dict(zip(columns,row))
         return {'owner_id':owner_id,'spam_protection':0,'spam_limit':10,'mute_duration':10}
     def set_spam_settings(self, owner_id, spam_protection=None, spam_limit=None, mute_duration=None):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT id FROM spam_settings WHERE owner_id=?', (owner_id,))
-        exists=cursor.fetchone()
-        settings={}
-        if spam_protection is not None:
-            settings['spam_protection']=spam_protection
-        if spam_limit is not None:
-            settings['spam_limit']=spam_limit
-        if mute_duration is not None:
-            settings['mute_duration']=mute_duration
-        if exists:
-            set_clause=', '.join([f"{key}=?" for key in settings.keys()])
-            values=list(settings.values())
-            values.append(owner_id)
-            cursor.execute(f'UPDATE spam_settings SET {set_clause} WHERE owner_id=?', values)
-        else:
-            default={'owner_id':owner_id,'spam_protection':0,'spam_limit':10,'mute_duration':10}
-            default.update(settings)
-            columns=', '.join(default.keys())
-            placeholders=', '.join(['?' for _ in default])
-            values=list(default.values())
-            cursor.execute(f'INSERT INTO spam_settings ({columns}) VALUES ({placeholders})', values)
-        conn.commit()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT id FROM spam_settings WHERE owner_id=?', (owner_id,))
+            exists=cursor.fetchone()
+            settings={}
+            if spam_protection is not None:
+                settings['spam_protection']=spam_protection
+            if spam_limit is not None:
+                settings['spam_limit']=spam_limit
+            if mute_duration is not None:
+                settings['mute_duration']=mute_duration
+            if exists:
+                set_clause=', '.join([f"{key}=?" for key in settings.keys()])
+                values=list(settings.values())
+                values.append(owner_id)
+                cursor.execute(f'UPDATE spam_settings SET {set_clause} WHERE owner_id=?', values)
+            else:
+                default={'owner_id':owner_id,'spam_protection':0,'spam_limit':10,'mute_duration':10}
+                default.update(settings)
+                columns=', '.join(default.keys())
+                placeholders=', '.join(['?' for _ in default])
+                values=list(default.values())
+                cursor.execute(f'INSERT INTO spam_settings ({columns}) VALUES ({placeholders})', values)
+            conn.commit()
+            conn.close()
     def get_original_name(self, owner_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT value FROM user_info WHERE user_id=? AND key="original_name" ORDER BY timestamp DESC LIMIT 1', (owner_id,))
-        result=cursor.fetchone()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT value FROM user_info WHERE user_id=? AND key="original_name" ORDER BY timestamp DESC LIMIT 1', (owner_id,))
+            result=cursor.fetchone()
+            conn.close()
         return result[0] if result else None
     def set_original_name(self, owner_id, original_name):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('INSERT INTO user_info (user_id, key, value) VALUES (?, "original_name", ?)', (owner_id, original_name))
-        conn.commit()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('INSERT INTO user_info (user_id, key, value) VALUES (?, "original_name", ?)', (owner_id, original_name))
+            conn.commit()
+            conn.close()
     def get_current_name(self, owner_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT value FROM user_info WHERE user_id=? AND key="current_name" ORDER BY timestamp DESC LIMIT 1', (owner_id,))
-        result=cursor.fetchone()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT value FROM user_info WHERE user_id=? AND key="current_name" ORDER BY timestamp DESC LIMIT 1', (owner_id,))
+            result=cursor.fetchone()
+            conn.close()
         return result[0] if result else None
     def set_current_name(self, owner_id, current_name):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('INSERT INTO user_info (user_id, key, value) VALUES (?, "current_name", ?)', (owner_id, current_name))
-        conn.commit()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('INSERT INTO user_info (user_id, key, value) VALUES (?, "current_name", ?)', (owner_id, current_name))
+            conn.commit()
+            conn.close()
     def get_user_name(self, user_id):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT known_name, first_name, username FROM user_memory WHERE user_id=?', (user_id,))
-        result=cursor.fetchone()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT known_name, first_name, username FROM user_memory WHERE user_id=?', (user_id,))
+            result=cursor.fetchone()
+            conn.close()
         if result:
             known_name,first_name,username=result
             if known_name:
@@ -710,29 +763,31 @@ class MainDatabase:
                 return f"@{username}"
         return f"کاربر {user_id}"
     def get_user_info(self, user_id, key=None):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        if key:
-            cursor.execute('SELECT value FROM user_info WHERE user_id=? AND key=? ORDER BY timestamp DESC LIMIT 1', (user_id, key))
-            result=cursor.fetchone()
-            conn.close()
-            return result[0] if result else None
-        else:
-            cursor.execute('SELECT key, value FROM user_info WHERE user_id=?', (user_id,))
-            results=cursor.fetchall()
-            conn.close()
-            return dict(results) if results else {}
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            if key:
+                cursor.execute('SELECT value FROM user_info WHERE user_id=? AND key=? ORDER BY timestamp DESC LIMIT 1', (user_id, key))
+                result=cursor.fetchone()
+                conn.close()
+                return result[0] if result else None
+            else:
+                cursor.execute('SELECT key, value FROM user_info WHERE user_id=?', (user_id,))
+                results=cursor.fetchall()
+                conn.close()
+                return dict(results) if results else {}
     def update_user_memory(self, user_id, username, first_name, last_name, chat_id, known_name=None):
-        conn=sqlite3.connect(self.db_name, timeout=10)
-        cursor=conn.cursor()
-        cursor.execute('SELECT user_id FROM user_memory WHERE user_id=?', (user_id,))
-        user_exists=cursor.fetchone()
-        if user_exists:
-            cursor.execute('UPDATE user_memory SET username=?, first_name=?, last_name=?, known_name=?, chat_id=?, last_seen=CURRENT_TIMESTAMP WHERE user_id=?', (username, first_name, last_name, known_name, chat_id, user_id))
-        else:
-            cursor.execute('INSERT INTO user_memory (user_id, username, first_name, last_name, known_name, chat_id, last_seen) VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)', (user_id, username, first_name, last_name, known_name, chat_id))
-        conn.commit()
-        conn.close()
+        with db_lock:
+            conn=sqlite3.connect(self.db_name, timeout=20)
+            cursor=conn.cursor()
+            cursor.execute('SELECT user_id FROM user_memory WHERE user_id=?', (user_id,))
+            user_exists=cursor.fetchone()
+            if user_exists:
+                cursor.execute('UPDATE user_memory SET username=?, first_name=?, last_name=?, known_name=?, chat_id=?, last_seen=CURRENT_TIMESTAMP WHERE user_id=?', (username, first_name, last_name, known_name, chat_id, user_id))
+            else:
+                cursor.execute('INSERT INTO user_memory (user_id, username, first_name, last_name, known_name, chat_id, last_seen) VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)', (user_id, username, first_name, last_name, known_name, chat_id))
+            conn.commit()
+            conn.close()
 
 db = MainDatabase()
 selfbot_managers = {}
@@ -896,6 +951,8 @@ async def _wrap_edit(message, text:str):
         await message.edit(text)
     except FloodWaitError as fl:
         await asyncio.sleep(fl.seconds)
+    except MessageIdInvalidError:
+        pass  # پیام قبلاً حذف شده
 
 async def advanced_heart_phase1(message):
     BIG_SCROLL="🧡💛💚💙💜🖤🤎"
@@ -936,13 +993,13 @@ async def advanced_heart_animation(message):
     await asyncio.sleep(SLEEP*2)
     await advanced_heart_phase4(message)
     await asyncio.sleep(0.5)
-    await message.edit("❤️ I")
+    await _wrap_edit(message,"❤️ I")
     await asyncio.sleep(0.5)
-    await message.edit("❤️ I Love")
+    await _wrap_edit(message,"❤️ I Love")
     await asyncio.sleep(0.5)
-    await message.edit("❤️ I Love You")
+    await _wrap_edit(message,"❤️ I Love You")
     await asyncio.sleep(3)
-    await message.edit("❤️ I Love You <3")
+    await _wrap_edit(message,"❤️ I Love You <3")
 
 class SelfBotManager:
     def __init__(self, user_id):
@@ -996,7 +1053,7 @@ class SelfBotManager:
                 except:
                     pass
                 self.client=None
-            self.client=TelegramClient(session_file,self.api_id,self.api_hash,connection_retries=10,retry_delay=3,timeout=60)
+            self.client=TelegramClient(session_file,self.api_id,self.api_hash,connection_retries=5,retry_delay=2,timeout=30)
             await self.client.connect()
             if not await self.client.is_user_authorized():
                 logger.error(f"کاربر {self.user_id} احراز هویت نشده")
@@ -1046,9 +1103,6 @@ class SelfBotManager:
 
     async def stop(self):
         try:
-            settings=db.get_selfbot_settings(self.user_id)
-            settings['panel_mode']=self.panel_mode
-            db.set_selfbot_settings(self.user_id,settings)
             if self.client:
                 for task in self.spam_tasks.values():
                     task.cancel()
@@ -1063,7 +1117,7 @@ class SelfBotManager:
             logger.error(f"خطا در توقف سلف‌بات کاربر {self.user_id}: {e}")
 
     async def keep_alive_task(self):
-        """وظیفه نگهداری اتصال و reconnect خودکار با log دقیق"""
+        """وظیفه نگهداری اتصال با مدیریت خطا و reconnect خودکار"""
         while self.running:
             try:
                 if self.client and self.client.is_connected():
@@ -1076,19 +1130,12 @@ class SelfBotManager:
                         logger.info(f"reconnect سلف‌بات کاربر {self.user_id} موفق بود")
                     else:
                         logger.error(f"reconnect سلف‌بات کاربر {self.user_id} ناموفق")
-                await asyncio.sleep(60)
+                await asyncio.sleep(30)
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"خطا در keep_alive کاربر {self.user_id}: {e}")
-                if "Connection" in str(e) or "disconnect" in str(e).lower():
-                    logger.info(f"تلاش برای reconnect کاربر {self.user_id} به دلیل خطای اتصال")
-                    await self.stop()
-                    await asyncio.sleep(5)
-                    if self.session_file and await self.start(self.session_file):
-                        logger.info(f"reconnect سلف‌بات کاربر {self.user_id} موفق بود")
-                    else:
-                        logger.error(f"reconnect سلف‌بات کاربر {self.user_id} ناموفق")
+                await asyncio.sleep(10)
 
     def setup_handlers(self):
         try:
@@ -1475,12 +1522,26 @@ class SelfBotManager:
     async def send_report(self, report_text, media_path=None, caption=None):
         try:
             if self.report_config.report_group_id:
-                if media_path and os.path.exists(media_path):
-                    await self.client.send_file(self.report_config.report_group_id,media_path,caption=caption or report_text)
-                    logger.info(f"گزارش با فایل ارسال شد: {media_path}")
-                else:
-                    await self.client.send_message(self.report_config.report_group_id,report_text)
-                    logger.info(f"گزارش متنی ارسال شد")
+                try:
+                    if media_path and os.path.exists(media_path):
+                        await self.client.send_file(self.report_config.report_group_id,media_path,caption=caption or report_text)
+                        logger.info(f"گزارش با فایل ارسال شد: {media_path}")
+                    else:
+                        await self.client.send_message(self.report_config.report_group_id,report_text)
+                        logger.info(f"گزارش متنی ارسال شد")
+                except Exception as e:
+                    if "Could not find the input entity" in str(e):
+                        logger.warning(f"گروه گزارش یافت نشد، تلاش با آیدی عددی: {self.report_config.report_group_id}")
+                        try:
+                            entity = await self.client.get_entity(int(self.report_config.report_group_id))
+                            if media_path and os.path.exists(media_path):
+                                await self.client.send_file(entity, media_path, caption=caption or report_text)
+                            else:
+                                await self.client.send_message(entity, report_text)
+                        except Exception as e2:
+                            logger.error(f"خطا در ارسال گزارش پس از تلاش مجدد: {e2}")
+                    else:
+                        logger.error(f"خطا در ارسال گزارش: {e}")
                 return True
             return False
         except Exception as e:
@@ -1811,11 +1872,12 @@ class SelfBotManager:
 
     def format_status_info(self, settings):
         try:
-            conn=sqlite3.connect('main_database.db', timeout=10)
-            cursor=conn.cursor()
-            cursor.execute('SELECT COUNT(*) FROM user_memory')
-            user_count=cursor.fetchone()[0]
-            conn.close()
+            with db_lock:
+                conn=sqlite3.connect('main_database.db', timeout=20)
+                cursor=conn.cursor()
+                cursor.execute('SELECT COUNT(*) FROM user_memory')
+                user_count=cursor.fetchone()[0]
+                conn.close()
         except:
             user_count=0
         pv_enemies=len(db.get_enemies(self.user_id,'pv'))
@@ -1999,25 +2061,31 @@ class SelfBotManager:
             match=re.match(r'^حذف\s+(\d+)$',command_text)
             num=int(match.group(1))
             messages=[]
-            async for msg in self.client.iter_messages(event.chat_id,limit=num):
-                if msg.sender_id==self.my_id:
-                    messages.append(msg.id)
-            if messages:
-                await self.client.delete_messages(event.chat_id,messages)
-                await event.edit(f"✅ {len(messages)} پیام حذف شد")
-            else:
-                await event.edit("⚠️ هیچ پیامی یافت نشد")
+            try:
+                async for msg in self.client.iter_messages(event.chat_id,limit=num):
+                    if msg.sender_id==self.my_id:
+                        messages.append(msg.id)
+                if messages:
+                    await self.client.delete_messages(event.chat_id,messages)
+                    await event.edit(f"✅ {len(messages)} پیام حذف شد")
+                else:
+                    await event.edit("⚠️ هیچ پیامی یافت نشد")
+            except Exception as e:
+                await event.edit(f"⚠️ خطا: {str(e)[:100]}")
             return
         if command_text=='حذف کامل':
             messages=[]
-            async for msg in self.client.iter_messages(event.chat_id,limit=None):
-                if msg.sender_id==self.my_id:
-                    messages.append(msg.id)
-            if messages:
-                await self.client.delete_messages(event.chat_id,messages)
-                await event.edit(f"✅ {len(messages)} پیام حذف شدند")
-            else:
-                await event.edit("⚠️ هیچ پیامی یافت نشد")
+            try:
+                async for msg in self.client.iter_messages(event.chat_id,limit=None):
+                    if msg.sender_id==self.my_id:
+                        messages.append(msg.id)
+                if messages:
+                    await self.client.delete_messages(event.chat_id,messages)
+                    await event.edit(f"✅ {len(messages)} پیام حذف شدند")
+                else:
+                    await event.edit("⚠️ هیچ پیامی یافت نشد")
+            except Exception as e:
+                await event.edit(f"⚠️ خطا: {str(e)[:100]}")
             return
         if command_text=='پینگ':
             start=time.time()
@@ -2858,7 +2926,7 @@ class SelfBotManager:
         except:
             pass
 
-# ========== توابع کیبورد پنل ==========
+# ========== توابع کیبورد پنل (بدون تغییر) ==========
 def get_main_panel_keyboard(user_id):
     keyboard=[[InlineKeyboardButton("🕐 زمان و پروفایل",callback_data=f"time_menu_{user_id}"),InlineKeyboardButton("❤️ انیمیشن",callback_data=f"animation_menu_{user_id}"),InlineKeyboardButton("👥 مدیریت کاربران",callback_data=f"user_menu_{user_id}")],[InlineKeyboardButton("🔒 قفل رسانه",callback_data=f"lock_menu_{user_id}"),InlineKeyboardButton("💬 کامنت",callback_data=f"comment_menu_{user_id}"),InlineKeyboardButton("📋 عمومی",callback_data=f"general_menu_{user_id}")],[InlineKeyboardButton("🎮 اکشن",callback_data=f"action_menu_{user_id}"),InlineKeyboardButton("🎲 بازی‌ها",callback_data=f"games_menu_{user_id}"),InlineKeyboardButton("🌐 ترجمه",callback_data=f"translate_menu_{user_id}")],[InlineKeyboardButton("🔍 گوگل",callback_data=f"google_menu_{user_id}"),InlineKeyboardButton("ℹ️ اطلاعاتی",callback_data=f"info_menu_{user_id}"),InlineKeyboardButton("📸 پروفایل",callback_data=f"profile_menu_{user_id}")],[InlineKeyboardButton("✍️ استایل متن",callback_data=f"style_menu_{user_id}"),InlineKeyboardButton("📨 مدیریت پیام",callback_data=f"message_menu_{user_id}"),InlineKeyboardButton("😊 ریکشن",callback_data=f"reaction_menu_{user_id}")],[InlineKeyboardButton("📩 اسپم",callback_data=f"spam_menu_{user_id}"),InlineKeyboardButton("✏️ تغییر پروفایل",callback_data=f"change_menu_{user_id}"),InlineKeyboardButton("🥷 مدیریت دشمنان",callback_data=f"enemy_menu_{user_id}")],[InlineKeyboardButton("🚫 فیلتر کلمات",callback_data=f"filter_menu_{user_id}"),InlineKeyboardButton("🛡️ حفاظت اسپم",callback_data=f"protection_menu_{user_id}"),InlineKeyboardButton("🤖 هوش مصنوعی",callback_data=f"ai_menu_{user_id}")],[InlineKeyboardButton("📊 گزارش",callback_data=f"report_menu_{user_id}"),InlineKeyboardButton("🤵 منشی موقت",callback_data=f"temp_assistant_menu_{user_id}")],[InlineKeyboardButton("❌ بستن پنل",callback_data=f"close_panel")]]
     return InlineKeyboardMarkup(keyboard)
@@ -2962,14 +3030,13 @@ def get_report_menu_keyboard(user_id):
     keyboard=[[InlineKeyboardButton("📍 تنظیم گزارش",callback_data=f"exec_set_report_{user_id}"),InlineKeyboardButton("ℹ️ گروه گزارش",callback_data=f"exec_show_report_{user_id}")],[InlineKeyboardButton("🔙 بازگشت",callback_data=f"back_main")]]
     return InlineKeyboardMarkup(keyboard)
 
-# ========== توابع اینلاین پنل ==========
+# ========== توابع اینلاین پنل (بدون تغییر عمده) ==========
 async def inline_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query=update.inline_query
     if not query:
         return
     user_id=query.from_user.id
     user_id_str=str(user_id)
-    # فقط کاربران فعال مجاز به دیدن پنل هستند
     if not db.is_user_active(user_id_str):
         results=[InlineQueryResultArticle(id=str(uuid.uuid4()),title="⛔ دسترسی محدود",description="شما عضو سرویس نیستید. برای عضویت /start را بزنید",input_message_content=InputTextMessageContent("⛔ شما به این پنل دسترسی ندارید\n\nبرای عضویت: /start"))]
         await query.answer(results,cache_time=1,is_personal=True)
@@ -3540,7 +3607,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id=query.from_user.id
     user_id_str=str(user_id)
     if data=="close_panel":
-        await query.delete_message()
+        try:
+            await query.delete_message()
+        except:
+            pass
         return
     if data=="back_main":
         if not db.is_user_active(user_id_str):
@@ -3637,7 +3707,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username=user.username or ""
     db.add_user(user_id,full_name,username)
     user_data=db.get_user(user_id)
-    # بررسی دقیق عضویت
     if user_data and user_data.get('self_active')==1:
         expiration_date=user_data.get('expiration_date')
         if expiration_date:
@@ -3649,14 +3718,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
             except:
                 pass
-        # کاربر فعال - نمایش پنل
         text=f"👋 سلام {full_name} عزیز!\n\n✅ حساب شما فعال است.\n• /panel - پنل مدیریت\n• @{BOT_USERNAME} - پنل اینلاین\n• .پنل - پنل در همین چت\n• .اهنگ [نام آهنگ] - پخش آهنگ\n\n⚠️ پنل فقط مخصوص شماست"
         keyboard=[[InlineKeyboardButton("📊 وضعیت عضویت",callback_data=f"membership_status_{user_id}")]]
         if user.id==ADMIN_ID:
             keyboard.append([InlineKeyboardButton("👑 پنل ادمین",callback_data="admin_panel")])
         await update.message.reply_text(text,reply_markup=InlineKeyboardMarkup(keyboard))
         return
-    # کاربر غیرفعال یا جدید
     text=f"👋 سلام {full_name} عزیز!\n\n🌟 به ربات سلف‌بات خوش آمدید.\n\n📌 برای استفاده:\n1️⃣ روی دکمه عضویت کلیک کنید\n2️⃣ شماره تلفن خود را وارد کنید\n3️⃣ کد تأیید را وارد کنید\n\n✅ پس از فعال شدن:\n• /panel - پنل مدیریت\n• @{BOT_USERNAME} - پنل اینلاین\n• .پنل - پنل در همین چت\n• .اهنگ [نام آهنگ] - پخش آهنگ"
     keyboard=[[InlineKeyboardButton("📝 عضویت",callback_data=f"membership_request_{user_id}")],[InlineKeyboardButton("📊 وضعیت عضویت",callback_data=f"membership_status_{user_id}")]]
     if user.id==ADMIN_ID:
@@ -3921,19 +3988,20 @@ async def main():
     try:
         while True:
             await asyncio.sleep(3600)
-            for user in db.get_active_users():
-                exp_date_str=user.get('expiration_date')
-                if exp_date_str:
-                    try:
-                        exp_date=datetime.strptime(exp_date_str,'%Y-%m-%d')
-                        if exp_date<datetime.now():
-                            db.update_user(user['user_id'],self_active=0)
-                            if user['user_id'] in selfbot_managers:
-                                await selfbot_managers[user['user_id']].stop()
-                                del selfbot_managers[user['user_id']]
-                            print(f"⏰ کاربر {user['user_id']} عضویت منقضی شد و غیرفعال گردید")
-                    except:
-                        pass
+            with db_lock:
+                for user in db.get_active_users():
+                    exp_date_str=user.get('expiration_date')
+                    if exp_date_str:
+                        try:
+                            exp_date=datetime.strptime(exp_date_str,'%Y-%m-%d')
+                            if exp_date<datetime.now():
+                                db.update_user(user['user_id'],self_active=0)
+                                if user['user_id'] in selfbot_managers:
+                                    await selfbot_managers[user['user_id']].stop()
+                                    del selfbot_managers[user['user_id']]
+                                print(f"⏰ کاربر {user['user_id']} عضویت منقضی شد و غیرفعال گردید")
+                        except:
+                            pass
     except (KeyboardInterrupt,SystemExit):
         logger.info("در حال توقف...")
     finally:
