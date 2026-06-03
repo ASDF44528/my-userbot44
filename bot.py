@@ -33,7 +33,7 @@ import threading
 import aiohttp  # added for async HTTP requests
 
 # ========== توکن جدید ==========
-BOT_TOKEN = "8262116870:AAGOUqJNnwYUcgFB0SvG1bWZEwUCVdYxQQw"
+BOT_TOKEN = "8262116870:AAESTHjD7Vhph5EGRhBqV_2lHpuQ5tI5LnQ"
 ADMIN_ID = 6443963679
 BOT_USERNAME = "Boot_nano_bot"
 MUSIC_BOT = "Gap_4_bot"
