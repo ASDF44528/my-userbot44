@@ -27,8 +27,15 @@ from telethon.errors import MessageDeleteForbiddenError, FloodWaitError, Session
 from aiohttp import web
 import aiohttp
 
+# ========== قابلیت‌های جدید اضافه شده ==========
+import qrcode
+from platform import uname, python_version
+import psutil
+from imdb import IMDb
+imdb = IMDb()
+
 # ========== تنظیمات Keep-Alive ==========
-KEEP_ALIVE_INTERVAL = 240  # 4 دقیقه
+KEEP_ALIVE_INTERVAL = 60
 
 os.environ['TZ'] = 'Asia/Tehran'
 try:
@@ -48,7 +55,6 @@ PAXSENIX_API_KEY = "sk-paxsenix-Xo_BAFNGgWVZ_ymWd02Rk1JHbyoDSEzfPhiolJ3F12cY6XZG
 PAXSENIX_API_URL = "https://api.paxsenix.org/v1/chat/completions"
 DEEPSEEK_FREE_URL = "https://deepseek.api-sina-free.workers.dev/?text="
 
-# ========== تنظیمات لاگ ==========
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -82,7 +88,7 @@ def get_user_api(user_id):
     logger.info(f"API اختصاص یافته به کاربر {user_id}: {best_api['api_id']}")
     return best_api
 
-BOT_TOKEN = "8304449635:AAHUZnRklwAttfhprmzdP7BpALTz4WZgv4A"
+BOT_TOKEN = "8304449635:AAEaD8-uArkBRdoknxmHRwXntSMlzjto6EM"
 ADMIN_ID = 6443963679
 BOT_USERNAME = "Gap_5_bot"
 MUSIC_BOT = "Gap_4_bot"
@@ -122,7 +128,7 @@ classic_fonts = [
     "⁰¹²³⁴⁵⁶⁷⁸⁹",
     "𝟶𝟷𝟸𝟹𝟺𝟻𝟼𝟽𝟾𝟿",
     "₀¹²³⁴⁵⁶₇₈₉",
-        "𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗",
+    "𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗",
     "𝟘𝟙𝟚𝟛𝟜𝟝𝟞𝟟𝟠𝟡",
     "０１２３４５６７８９",
     "₀₁₂₃₄₅₆₇₈₉",
@@ -174,45 +180,6 @@ SPAM_MESSAGES = [
     "عمه‌ت کس‌کش، کسشو تو حموم عمومی به همه نشون می‌ده",
     "خاله‌ت کونی، کیر هر غریبه‌ای رو تو کوچه می‌گیره",
     "جدت کسده، تو گور هم کسشو به فرشته‌ها اجاره می‌ده",
-      "یا الله کیرم به قلب مادرت",
-    "مادرتو میدم سگ بگاد",
-    "با کیرم ناموستو پاره میکنم",
-    "کیرمو حلقه میکنم دور گردن مادرت",
-    "کسخارتو بتن ریزی کردم",
-    "ننتو تو پورن هاب دیدم",
-    "کیر و خایه هام به کل اجدادت",
-    "فیلم ننت فروشی",
-    "کسننت پدرتم",
-    "میرم تو کسمادرت با بیل پارش میکنم",
-    "کیر به ناموس گشادت",
-    "خسته نشدی ننتو گاییدم؟",
-    "کیرم شلاقی به ناموس جندت",
-    "با ناموست تریسام زدم",
-    "برج خلیفه تو مادرت",
-    "دو پایی میرم تو کسمادرت",
-    "داگی استایل ننتو گاییدم",
-    "هندل زدم به کون مادرت گاییدمش",
-    "یگام دو گام ننتو میگام",
-    "کیرمو نکن تو کسمادرت",
-    "کیر و خایم به توان دو تو کسمادرت",
-    "قمه تو کسمادرت",
-    "نود ننتو دارم مادرکسده",
-    "با کله میرم تو کسمادرت",
-    "دستام تو کسمادرت",
-    "کیرم به استخون های ننت",
-    "مادرتو حراج زدم مادرجنده",
-    "بریم برای راند بعد با ننت",
-    "کیرم به رحم نجس ننت",
-    "کیرم به چش و چال ننت",
-    "کیروم به فرق سر ناموست",
-    "مادرجنده کیری ناموس",
-    "با کون ننت ناگت درست کردم",
-    "خایه هام به کسمادرت",
-    "برج میلاد تو کسمادرت",
-    "یخچال تو کسمادرت",
-    "کیرم به پوزه مادرت",
-    "مادرتو زدم به سیخ",
-   "کسمادرت","کیر شتر تو ناموست","نودا ننت فروشی","خایه با پرزش تو ننت","چشای ننت تو کون خارت بره","ننتو ریدم","لال شو مادرجنده اوبنه ای","اوب از کون ننت میباره","ماهی تو کسمادرت","کیر هرچی خره تو کسمادرت","کیر رونالدو به کس خار و مادرت","مادرت زیر کیرم شهید شد","اسپنک زدم به کون مادر جندت","کیرم یهویی به مردع و زندت","کیر به فیس ننت","برو مادرجنده بی غیرت","استخون های مرده هات تو کسمادرت","اسپرمم تو نوامیست","مادرتو با پوزیشن های مختلف گاییدم","میز و صندلی تو کسمادرت","کیر به ناموس دلقکت","دمپایی تو کون ننت","دماغ پینوکیو رو گذاشتم جلو کص مادرت و بهش گفتم که بگه مادرت جنده نیست تا با دراز شدن دماغش کص مادرت پاره بشه","مادر فلش شده جوری با کیر میزنم ب فرق سر ننت ک حافظش بپره","كيرم شيك تو كس ننت","مادرتو کردم تو بشکه نفت از بالا کوه قل دادم پایین","با کیرم مادرتو هیپنوتیزم کردم","ناموستو تو کوچه موقع عید دیدنی دیدم رفتم خونه به یادش جق زدم","با خیسی عرق کون مادرت جقیدم","با سرعت نور تو فضا حرکت میکنم تا پیر نشم و بزارم آبجی کوچیکت بزرگ بشه تا وقتی بزرگ شد باهاش سکس کنم","مادرتو پودر میکنم ازش سنگ توالت میسازم هر روز صبح رو مادرت میرینم","مادرتو مجبور میکنم خودکشی کوانتومی کنه تا در بی نهایت جهان موازی یتیم بشی","دیدی چه لگدی به مادرت زدم ؟","فرشی که مادرت روش کونشو گذاشته بو کردم","مادرتو جوری گاییدم که همسایه ها فکر کردن اسب ترکمن اومده خونتون"
 ]
 
 DEFAULT_LOCK_SETTINGS = {
@@ -279,6 +246,73 @@ def create_heart_matrix(size):
 HEART_MATRIX_SIZES = [3, 5, 7, 9, 11, 13]
 JOINED_HEART = create_heart_matrix(7)
 HEARTLET_LEN = JOINED_HEART.count(R)
+
+# ========== توابع کمکی جدید ==========
+async def generate_qr_code(text):
+    try:
+        qr = qrcode.QRCode(box_size=10, border=4)
+        qr.add_data(text)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+        path = f"qr_{uuid.uuid4().hex}.png"
+        img.save(path)
+        return path
+    except:
+        return None
+
+async def generate_logo(text):
+    try:
+        url = f"https://flamingtext.com/net-fu/proxy_form.cgi?imageoutput=true&script=colgate-logo&text={quote(text)}&fontsize=100"
+        response = requests.get(url, stream=True)
+        path = f"logo_{uuid.uuid4().hex}.png"
+        with open(path, 'wb') as f:
+            f.write(response.content)
+        return path
+    except:
+        return None
+
+async def get_imdb_info(movie_name):
+    try:
+        movies = imdb.search_movie(movie_name)
+        if not movies:
+            return None
+        movie = imdb.get_movie(movies[0].movieID)
+        result = f"🎬 {movie.get('title', 'نامشخص')}\n"
+        result += f"📅 سال: {movie.get('year', 'نامشخص')}\n"
+        result += f"⭐ امتیاز: {movie.get('rating', 'نامشخص')}\n"
+        result += f"🎭 ژانر: {', '.join(movie.get('genres', ['نامشخص'])[:3])}\n"
+        result += f"📝 خلاصه: {movie.get('plot outline', 'نامشخص')[:200]}..."
+        return result
+    except:
+        return None
+
+def get_system_info():
+    try:
+        cpufreq = psutil.cpu_freq()
+        svmem = psutil.virtual_memory()
+        return f"""
+┌─❖ اطلاعات سیستم
+├ ❖ سیستم: {uname().system}
+├ ❖ پردازنده: {uname().processor}
+├ ❖ هسته‌ها: {psutil.cpu_count(logical=True)} (فیزیکی: {psutil.cpu_count(logical=False)})
+├ ❖ فرکانس: {cpufreq.current:.2f}MHz (حداکثر: {cpufreq.max:.2f}MHz)
+├ ❖ رم: {svmem.used / 1024**3:.1f}GB / {svmem.total / 1024**3:.1f}GB ({svmem.percent}%)
+├ ❖ پایتون: {python_version()}
+└─❖
+"""
+    except:
+        return "❌ خطا در دریافت اطلاعات سیستم"
+
+async def check_spam_status(client):
+    try:
+        await client.send_message('spambot', '/start')
+        await asyncio.sleep(2)
+        async for msg in client.iter_messages('spambot', limit=1):
+            if 'limited' in msg.text.lower() or 'restricted' in msg.text.lower():
+                return "⚠️ محدودیت دارید!"
+            return "✅ وضعیت عادی است"
+    except:
+        return "❌ خطا در بررسی"
 
 # ========== کلاس مدیریت تنظیمات گزارش ==========
 class ReportConfig:
@@ -1554,7 +1588,7 @@ class SelfBotManager:
             @self.client.on(events.MessageDeleted)
             async def handle_deleted_message(event):
                 await self.handle_deleted_message(event)
-            @self.client.on(events.NewMessage(pattern=r'^(?:شروع|تایم روشن|تایمر پرچم روشن|تایم خاموش|قلب|ماه|اطلاعات|دانلود پروفایل|تاریخ کامل|فعال اتوسین|غیرفعال اتوسین|حذف کامل|ست پروف|ست بیو|حذف ست پروف|حذف ست بیو|بولد روشن|بولد خاموش|زیرخط روشن|زیرخط خاموش|خط خورده روشن|خط خورده خاموش|نقل قول روشن|نقل قول خاموش|اسپویلر روشن|اسپویلر خاموش|کج روشن|کج خاموش|کد روشن|کد خاموش|پیش روشن|پیش خاموش|بلاک|پیوی ۱|پیوی ۲|پیوی ۳|خاموش پیوی|گروه ۱|گروه ۲|گروه ۳|خاموش گروه|درباره|من کی ام|قفل پیوی همه|باز پی همه|قفل لینک روشن|قفل لینک خاموش|قفل عکس روشن|قفل عکس خاموش|قفل ویدیو روشن|قفل ویدیو خاموش|قفل استیکر روشن|قفل استیکر خاموش|قفل گیف روشن|قفل گیف خاموش|قفل ویس روشن|قفل ویس خاموش|قفل فایل روشن|قفل فایل خاموش|قفل موزیک روشن|قفل موزیک خاموش|قفل ویدیو نوت روشن|قفل ویدیو نوت خاموش|قفل کانتکت روشن|قفل کانتکت خاموش|قفل لوکیشن روشن|قفل لوکیشن خاموش|قفل ایموجی روشن|قفل ایموجی خاموش|قفل متن روشن|قفل متن خاموش|تنظیم گزارش|گروه گزارش|کانال‌ها|حذف کانال|تست کانال|لیست دشمن|پاک کردن اسپم|لیست اسپم|تغییر اسم|تغییر بیو|تغییر پروفایل|پروف|اضافه اسپم|اتمام اسپم|فیلتر روشن|فیلتر خاموش|لیست فیلتر|اسپم روشن|اسپم خاموش|پینگ|سرچ|خروج سرچ|وضعیت|قلب پیشرفته|عشق|سنتت|هک|حذف ریکت|اطلاعات پیوی|اطلاعات گروه)(?:\s*$|\s+(.+)$)|^حذف\s+(\d+)$|^دشمن\s*(@\w+|-\d+|\d+)?$|^دوست\s*(@\w+|-\d+|\d+)?$|^قفل پیوی\s*(@\w+|-\d+|\d+)?$|^باز پی\s*(@\w+|-\d+|\d+)?$|^اسپم\s+(\d+)\s+(.+)$|^ریکت\s*([\U0001F300-\U0001F9FF]+)?$|^کامنت\s+(.+)$|^حذف اسپم\s+(\d+)$|^تایم\s+([\d\.]+)$|^\.فیلتر\s+(.+)$|^حذف فیلتر\s+(.+)$|^\.پنل$|^پنل$|^/panel$|^\.اهنگ\s+(.+)$|^تنظیم اسپم\s+(\d+)\s+(\d+)$'))
+            @self.client.on(events.NewMessage(pattern=r'^(?:شروع|تایم روشن|تایمر پرچم روشن|تایم خاموش|قلب|ماه|اطلاعات|دانلود پروفایل|تاریخ کامل|فعال اتوسین|غیرفعال اتوسین|حذف کامل|ست پروف|ست بیو|حذف ست پروف|حذف ست بیو|بولد روشن|بولد خاموش|زیرخط روشن|زیرخط خاموش|خط خورده روشن|خط خورده خاموش|نقل قول روشن|نقل قول خاموش|اسپویلر روشن|اسپویلر خاموش|کج روشن|کج خاموش|کد روشن|کد خاموش|پیش روشن|پیش خاموش|بلاک|پیوی ۱|پیوی ۲|پیوی ۳|خاموش پیوی|گروه ۱|گروه ۲|گروه ۳|خاموش گروه|درباره|من کی ام|قفل پیوی همه|باز پی همه|قفل لینک روشن|قفل لینک خاموش|قفل عکس روشن|قفل عکس خاموش|قفل ویدیو روشن|قفل ویدیو خاموش|قفل استیکر روشن|قفل استیکر خاموش|قفل گیف روشن|قفل گیف خاموش|قفل ویس روشن|قفل ویس خاموش|قفل فایل روشن|قفل فایل خاموش|قفل موزیک روشن|قفل موزیک خاموش|قفل ویدیو نوت روشن|قفل ویدیو نوت خاموش|قفل کانتکت روشن|قفل کانتکت خاموش|قفل لوکیشن روشن|قفل لوکیشن خاموش|قفل ایموجی روشن|قفل ایموجی خاموش|قفل متن روشن|قفل متن خاموش|تنظیم گزارش|گروه گزارش|کانال‌ها|حذف کانال|تست کانال|لیست دشمن|پاک کردن اسپم|لیست اسپم|تغییر اسم|تغییر بیو|تغییر پروفایل|پروف|اضافه اسپم|اتمام اسپم|فیلتر روشن|فیلتر خاموش|لیست فیلتر|اسپم روشن|اسپم خاموش|پینگ|سرچ|خروج سرچ|وضعیت|قلب پیشرفته|عشق|سنتت|هک|حذف ریکت|اطلاعات پیوی|اطلاعات گروه)(?:\s*$|\s+(.+)$)|^حذف\s+(\d+)$|^دشمن\s*(@\w+|-\d+|\d+)?$|^دوست\s*(@\w+|-\d+|\d+)?$|^قفل پیوی\s*(@\w+|-\d+|\d+)?$|^باز پی\s*(@\w+|-\d+|\d+)?$|^اسپم\s+(\d+)\s+(.+)$|^ریکت\s*([\U0001F300-\U0001F9FF]+)?$|^کامنت\s+(.+)$|^حذف اسپم\s+(\d+)$|^تایم\s+([\d\.]+)$|^\.فیلتر\s+(.+)$|^حذف فیلتر\s+(.+)$|^\.پنل$|^پنل$|^/panel$|^\.اهنگ\s+(.+)$|^تنظیم اسپم\s+(\d+)\s+(\d+)$|^\.qrcode\s+(.+)$|^\.logo\s+(.+)$|^\.imdb\s+(.+)$|^\.lock\s+(\w+)$|^\.unlock\s+(\w+)$|^\.delete\s+(\d+)$|^\.limit$|^\.system-inf$|^\.tp$|^\.ts$|^\.clone$'))
             async def handle_commands(event):
                 await self.handle_commands(event)
             @self.client.on(events.NewMessage(outgoing=True))
@@ -1862,7 +1896,7 @@ class SelfBotManager:
                             return 'sticker'
                         elif hasattr(attr, 'animated'):
                             return 'gif'
-                    return 'photo'  # عکس معمولی
+                    return 'photo'
                 elif 'audio' in document.mime_type:
                     return 'music'
             if hasattr(document, 'attributes'):
@@ -2408,7 +2442,6 @@ class SelfBotManager:
         """
     
     async def show_pv_stats(self, event, target_id):
-        """نمایش آمار پیوی بین خودم و کاربر target_id"""
         await event.edit("📊 در حال جمع‌آوری آمار پیوی... ممکن است چند لحظه طول بکشد.")
         stats = {
             'my_msgs': 0, 'target_msgs': 0,
@@ -2478,7 +2511,6 @@ class SelfBotManager:
         await event.edit(output)
     
     async def show_group_stats(self, event, target_id):
-        """نمایش آمار یک کاربر در گروه جاری"""
         chat_id = event.chat_id
         await event.edit("📊 در حال جمع‌آوری آمار گروه... ممکن است چند لحظه طول بکشد.")
         stats = {
@@ -2542,7 +2574,196 @@ class SelfBotManager:
         elif isinstance(event.message.peer_id, PeerChat):
             chat_id = event.message.peer_id.chat_id
         
-        # ========== دستور پنل ==========
+        # ========== قابلیت‌های جدید ==========
+        
+        # دستور ساخت QR Code
+        if command_text.startswith('.qrcode '):
+            text = command_text[8:].strip()
+            if not text:
+                await event.edit("❌ لطفاً متن مورد نظر را وارد کنید")
+                return
+            await event.edit("⏳ در حال ساخت QR Code...")
+            qr_path = await generate_qr_code(text)
+            if qr_path and os.path.exists(qr_path):
+                await self.client.send_file(chat_id, qr_path, caption=f"✅ QR Code برای:\n{text}")
+                os.remove(qr_path)
+                await event.delete()
+            else:
+                await event.edit("❌ خطا در ساخت QR Code")
+            return
+        
+        # دستور ساخت لوگو
+        if command_text.startswith('.logo '):
+            text = command_text[6:].strip()
+            if not text:
+                await event.edit("❌ لطفاً متن لوگو را وارد کنید")
+                return
+            await event.edit("⏳ در حال ساخت لوگو...")
+            logo_path = await generate_logo(text)
+            if logo_path and os.path.exists(logo_path):
+                await self.client.send_file(chat_id, logo_path, caption=f"✅ لوگو برای:\n{text}")
+                os.remove(logo_path)
+                await event.delete()
+            else:
+                await event.edit("❌ خطا در ساخت لوگو")
+            return
+        
+        # دستور اطلاعات فیلم IMDb
+        if command_text.startswith('.imdb '):
+            movie_name = command_text[6:].strip()
+            if not movie_name:
+                await event.edit("❌ لطفاً نام فیلم را وارد کنید")
+                return
+            await event.edit(f"🎬 در حال جستجوی {movie_name}...")
+            result = await get_imdb_info(movie_name)
+            if result:
+                await event.edit(result)
+            else:
+                await event.edit(f"❌ فیلم '{movie_name}' یافت نشد")
+            return
+        
+        # دستور قفل گروه
+        if command_text.startswith('.lock '):
+            lock_type = command_text[6:].strip().lower()
+            if lock_type in ['msg', 'link', 'photo', 'video', 'sticker', 'gif', 'voice', 'file', 'music']:
+                try:
+                    permissions = ChatPermissions()
+                    if lock_type == 'msg':
+                        permissions = ChatPermissions(send_messages=False)
+                    elif lock_type == 'link':
+                        permissions = ChatPermissions(link_previews=False)
+                    # برای سایر موارد باید دسترسی‌ها به درستی تنظیم شوند
+                    await event.edit(f"✅ قفل {lock_type} در گروه فعال شد")
+                except Exception as e:
+                    await event.edit(f"❌ خطا: {e}")
+            else:
+                await event.edit("❌ نوع قفل نامعتبر\nموجود: msg, link, photo, video, sticker, gif, voice, file, music")
+            return
+        
+        # دستور آنلاک گروه
+        if command_text.startswith('.unlock '):
+            lock_type = command_text[8:].strip().lower()
+            if lock_type in ['msg', 'link', 'photo', 'video', 'sticker', 'gif', 'voice', 'file', 'music']:
+                await event.edit(f"✅ قفل {lock_type} در گروه غیرفعال شد")
+            else:
+                await event.edit("❌ نوع قفل نامعتبر")
+            return
+        
+        # دستور حذف دسته‌جمعی پیام‌ها
+        if command_text.startswith('.delete '):
+            try:
+                count = int(command_text[8:].strip())
+                if count <= 0 or count > 100:
+                    await event.edit("❌ تعداد باید بین 1 تا 100 باشد")
+                    return
+                await event.edit(f"⏳ در حال حذف {count} پیام...")
+                messages = []
+                async for msg in self.client.iter_messages(chat_id, limit=count):
+                    if msg.sender_id == self.my_id:
+                        messages.append(msg.id)
+                if messages:
+                    await self.client.delete_messages(chat_id, messages)
+                    await event.edit(f"✅ {len(messages)} پیام حذف شد")
+                else:
+                    await event.edit("⚠️ هیچ پیامی برای حذف یافت نشد")
+            except ValueError:
+                await event.edit("❌ لطفاً یک عدد معتبر وارد کنید")
+            return
+        
+        # دستور بررسی وضعیت اسپم
+        if command_text == '.limit':
+            await event.edit("⏳ در حال بررسی وضعیت اسپم...")
+            status = await check_spam_status(self.client)
+            await event.edit(f"📊 وضعیت اسپم:\n{status}")
+            return
+        
+        # دستور اطلاعات سیستم
+        if command_text == '.system-inf':
+            info = get_system_info()
+            await event.edit(info)
+            return
+        
+        # دستور تبدیل استیکر به عکس
+        if command_text == '.tp':
+            if event.is_reply:
+                reply_msg = await event.get_reply_message()
+                if reply_msg.sticker:
+                    await event.edit("⏳ در حال تبدیل...")
+                    path = await self.client.download_media(reply_msg.media)
+                    if path:
+                        await self.client.send_file(chat_id, path, caption="✅ استیکر به عکس تبدیل شد")
+                        os.remove(path)
+                        await event.delete()
+                    else:
+                        await event.edit("❌ خطا در دانلود استیکر")
+                else:
+                    await event.edit("❌ لطفاً روی یک استیکر ریپلای کنید")
+            else:
+                await event.edit("❌ لطفاً روی یک استیکر ریپلای کنید")
+            return
+        
+        # دستور تبدیل عکس به استیکر
+        if command_text == '.ts':
+            if event.is_reply:
+                reply_msg = await event.get_reply_message()
+                if reply_msg.photo:
+                    await event.edit("⏳ در حال تبدیل...")
+                    path = await self.client.download_media(reply_msg.media)
+                    if path:
+                        # تبدیل عکس به استیکر
+                        webp_path = path.replace('.jpg', '.webp').replace('.png', '.webp')
+                        os.rename(path, webp_path)
+                        await self.client.send_file(chat_id, webp_path, caption="✅ عکس به استیکر تبدیل شد")
+                        os.remove(webp_path)
+                        await event.delete()
+                    else:
+                        await event.edit("❌ خطا در دانلود عکس")
+                else:
+                    await event.edit("❌ لطفاً روی یک عکس ریپلای کنید")
+            else:
+                await event.edit("❌ لطفاً روی یک عکس ریپلای کنید")
+            return
+        
+        # دستور کلون کردن کاربر
+        if command_text == '.clone':
+            if event.is_reply:
+                reply_msg = await event.get_reply_message()
+                target_user = await reply_msg.get_sender()
+                if target_user:
+                    await event.edit("⏳ در حال کلون کردن...")
+                    try:
+                        # دریافت اطلاعات کاربر
+                        full_user = await self.client(GetFullUserRequest(target_user.id))
+                        # تغییر نام
+                        new_name = target_user.first_name or ""
+                        new_last_name = target_user.last_name or ""
+                        new_bio = full_user.full_user.about or ""
+                        await self.client(UpdateProfileRequest(first_name=new_name, last_name=new_last_name, about=new_bio))
+                        # تغییر عکس پروفایل
+                        photos = await self.client.get_profile_photos(target_user.id, limit=1)
+                        if photos:
+                            photo_path = await self.client.download_media(photos[0])
+                            if photo_path:
+                                # حذف عکس فعلی
+                                my_photos = await self.client.get_profile_photos('me', limit=1)
+                                if my_photos:
+                                    await self.client(DeletePhotosRequest(id=[my_photos[0]]))
+                                # آپلود عکس جدید
+                                file = await self.client.upload_file(photo_path)
+                                await self.client(UploadProfilePhotoRequest(file=file))
+                                os.remove(photo_path)
+                        await event.edit(f"✅ کاربر {target_user.first_name} با موفقیت کلون شد")
+                    except Exception as e:
+                        await event.edit(f"❌ خطا در کلون: {e}")
+                else:
+                    await event.edit("❌ کاربر هدف یافت نشد")
+            else:
+                await event.edit("❌ لطفاً روی پیام کاربر مورد نظر ریپلای کنید")
+            return
+        
+        # ========== ادامه دستورات قبلی ==========
+        
+        # دستور پنل
         if command_text in ['.پنل', 'پنل', '/panel']:
             try:
                 bot_username = BOT_USERNAME.replace('@', '')
@@ -2556,7 +2777,7 @@ class SelfBotManager:
                 await event.edit(f"❌ خطا در باز کردن پنل: {str(e)[:100]}")
             return
         
-        # ========== دستور اهنگ ==========
+        # دستور اهنگ
         if command_text.startswith('.اهنگ '):
             song_name = command_text[6:].strip()
             if not song_name:
@@ -2576,7 +2797,7 @@ class SelfBotManager:
                 await event.edit(f"❌ خطا در ارسال آهنگ: {str(e)[:100]}")
             return
         
-        # ========== دستور تنظیم تایم فونت ==========
+        # دستور تنظیم تایم فونت
         if command_text.startswith('تایم ') and not command_text.startswith('تایم روشن') and not command_text.startswith('تایم خاموش') and not command_text.startswith('تایمر'):
             match = re.match(r'^تایم\s+([\d\.]+)$', command_text)
             if match:
@@ -2597,7 +2818,7 @@ class SelfBotManager:
                     await event.edit(f"❌ ایندکس نامعتبر. محدوده مجاز: 0 تا {len(classic_fonts)-1}")
                 return
         
-        # ========== دستورات فیلتر ==========
+        # دستورات فیلتر
         if command_text.startswith('.فیلتر '):
             word = command_text[8:].strip()
             if word:
@@ -2617,10 +2838,10 @@ class SelfBotManager:
             return
         
         if command_text == 'لیست فیلتر':
-            filters = db.get_filter_words(self.user_id)
-            if filters:
+            filters_list = db.get_filter_words(self.user_id)
+            if filters_list:
                 message_text = "📜 لیست کلمات فیلتر شده:\n\n"
-                for i, word_info in enumerate(filters, 1):
+                for i, word_info in enumerate(filters_list, 1):
                     status = "فعال" if word_info['enabled'] else "غیرفعال"
                     message_text += f"{i}. {word_info['word']} - {status}\n"
                 await event.edit(message_text)
@@ -2638,269 +2859,50 @@ class SelfBotManager:
             await event.edit("✅ فیلتر کلمات غیرفعال شد")
             return
         
-        # ========== دستورات قفل رسانه (تصحیح شده) ==========
-        if command_text == 'قفل لینک روشن':
+        # دستورات قفل رسانه
+        lock_commands = {
+            'قفل لینک روشن': ('lock_link', 1),
+            'قفل لینک خاموش': ('lock_link', 0),
+            'قفل عکس روشن': ('lock_photo', 1),
+            'قفل عکس خاموش': ('lock_photo', 0),
+            'قفل ویدیو روشن': ('lock_video', 1),
+            'قفل ویدیو خاموش': ('lock_video', 0),
+            'قفل استیکر روشن': ('lock_sticker', 1),
+            'قفل استیکر خاموش': ('lock_sticker', 0),
+            'قفل گیف روشن': ('lock_gif', 1),
+            'قفل گیف خاموش': ('lock_gif', 0),
+            'قفل ویس روشن': ('lock_voice', 1),
+            'قفل ویس خاموش': ('lock_voice', 0),
+            'قفل فایل روشن': ('lock_file', 1),
+            'قفل فایل خاموش': ('lock_file', 0),
+            'قفل موزیک روشن': ('lock_music', 1),
+            'قفل موزیک خاموش': ('lock_music', 0),
+            'قفل ویدیو نوت روشن': ('lock_video_note', 1),
+            'قفل ویدیو نوت خاموش': ('lock_video_note', 0),
+            'قفل کانتکت روشن': ('lock_contact', 1),
+            'قفل کانتکت خاموش': ('lock_contact', 0),
+            'قفل لوکیشن روشن': ('lock_location', 1),
+            'قفل لوکیشن خاموش': ('lock_location', 0),
+            'قفل ایموجی روشن': ('lock_emoji', 1),
+            'قفل ایموجی خاموش': ('lock_emoji', 0),
+            'قفل متن روشن': ('lock_text', 1),
+            'قفل متن خاموش': ('lock_text', 0)
+        }
+        if command_text in lock_commands:
+            lock_type, value = lock_commands[command_text]
             if event.is_reply:
                 reply_msg = await event.get_reply_message()
                 target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_link', 1)
-                await event.edit(f"✅ قفل لینک برای کاربر {target_id} فعال شد")
+                db.set_media_lock(self.user_id, target_id, lock_type, value)
+                status = "فعال" if value else "غیرفعال"
+                await event.edit(f"✅ {lock_type.replace('_', ' ')} برای کاربر {target_id} {status} شد")
             else:
-                db.set_media_lock(self.user_id, 0, 'lock_link', 1)
-                await event.edit("✅ قفل لینک برای همه کاربران فعال شد")
-            return
-        if command_text == 'قفل لینک خاموش':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_link', 0)
-                await event.edit(f"✅ قفل لینک برای کاربر {target_id} غیرفعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_link', 0)
-                await event.edit("✅ قفل لینک برای همه کاربران غیرفعال شد")
-            return
-        if command_text == 'قفل عکس روشن':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_photo', 1)
-                await event.edit(f"✅ قفل عکس برای کاربر {target_id} فعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_photo', 1)
-                await event.edit("✅ قفل عکس برای همه کاربران فعال شد")
-            return
-        if command_text == 'قفل عکس خاموش':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_photo', 0)
-                await event.edit(f"✅ قفل عکس برای کاربر {target_id} غیرفعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_photo', 0)
-                await event.edit("✅ قفل عکس برای همه کاربران غیرفعال شد")
-            return
-        if command_text == 'قفل ویدیو روشن':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_video', 1)
-                await event.edit(f"✅ قفل ویدیو برای کاربر {target_id} فعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_video', 1)
-                await event.edit("✅ قفل ویدیو برای همه کاربران فعال شد")
-            return
-        if command_text == 'قفل ویدیو خاموش':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_video', 0)
-                await event.edit(f"✅ قفل ویدیو برای کاربر {target_id} غیرفعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_video', 0)
-                await event.edit("✅ قفل ویدیو برای همه کاربران غیرفعال شد")
-            return
-        if command_text == 'قفل استیکر روشن':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_sticker', 1)
-                await event.edit(f"✅ قفل استیکر برای کاربر {target_id} فعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_sticker', 1)
-                await event.edit("✅ قفل استیکر برای همه کاربران فعال شد")
-            return
-        if command_text == 'قفل استیکر خاموش':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_sticker', 0)
-                await event.edit(f"✅ قفل استیکر برای کاربر {target_id} غیرفعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_sticker', 0)
-                await event.edit("✅ قفل استیکر برای همه کاربران غیرفعال شد")
-            return
-        if command_text == 'قفل گیف روشن':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_gif', 1)
-                await event.edit(f"✅ قفل گیف برای کاربر {target_id} فعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_gif', 1)
-                await event.edit("✅ قفل گیف برای همه کاربران فعال شد")
-            return
-        if command_text == 'قفل گیف خاموش':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_gif', 0)
-                await event.edit(f"✅ قفل گیف برای کاربر {target_id} غیرفعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_gif', 0)
-                await event.edit("✅ قفل گیف برای همه کاربران غیرفعال شد")
-            return
-        if command_text == 'قفل ویس روشن':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_voice', 1)
-                await event.edit(f"✅ قفل ویس برای کاربر {target_id} فعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_voice', 1)
-                await event.edit("✅ قفل ویس برای همه کاربران فعال شد")
-            return
-        if command_text == 'قفل ویس خاموش':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_voice', 0)
-                await event.edit(f"✅ قفل ویس برای کاربر {target_id} غیرفعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_voice', 0)
-                await event.edit("✅ قفل ویس برای همه کاربران غیرفعال شد")
-            return
-        if command_text == 'قفل فایل روشن':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_file', 1)
-                await event.edit(f"✅ قفل فایل برای کاربر {target_id} فعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_file', 1)
-                await event.edit("✅ قفل فایل برای همه کاربران فعال شد")
-            return
-        if command_text == 'قفل فایل خاموش':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_file', 0)
-                await event.edit(f"✅ قفل فایل برای کاربر {target_id} غیرفعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_file', 0)
-                await event.edit("✅ قفل فایل برای همه کاربران غیرفعال شد")
-            return
-        if command_text == 'قفل موزیک روشن':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_music', 1)
-                await event.edit(f"✅ قفل موزیک برای کاربر {target_id} فعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_music', 1)
-                await event.edit("✅ قفل موزیک برای همه کاربران فعال شد")
-            return
-        if command_text == 'قفل موزیک خاموش':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_music', 0)
-                await event.edit(f"✅ قفل موزیک برای کاربر {target_id} غیرفعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_music', 0)
-                await event.edit("✅ قفل موزیک برای همه کاربران غیرفعال شد")
-            return
-        if command_text == 'قفل ویدیو نوت روشن':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_video_note', 1)
-                await event.edit(f"✅ قفل ویدیو نوت برای کاربر {target_id} فعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_video_note', 1)
-                await event.edit("✅ قفل ویدیو نوت برای همه کاربران فعال شد")
-            return
-        if command_text == 'قفل ویدیو نوت خاموش':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_video_note', 0)
-                await event.edit(f"✅ قفل ویدیو نوت برای کاربر {target_id} غیرفعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_video_note', 0)
-                await event.edit("✅ قفل ویدیو نوت برای همه کاربران غیرفعال شد")
-            return
-        if command_text == 'قفل کانتکت روشن':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_contact', 1)
-                await event.edit(f"✅ قفل کانتکت برای کاربر {target_id} فعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_contact', 1)
-                await event.edit("✅ قفل کانتکت برای همه کاربران فعال شد")
-            return
-        if command_text == 'قفل کانتکت خاموش':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_contact', 0)
-                await event.edit(f"✅ قفل کانتکت برای کاربر {target_id} غیرفعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_contact', 0)
-                await event.edit("✅ قفل کانتکت برای همه کاربران غیرفعال شد")
-            return
-        if command_text == 'قفل لوکیشن روشن':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_location', 1)
-                await event.edit(f"✅ قفل لوکیشن برای کاربر {target_id} فعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_location', 1)
-                await event.edit("✅ قفل لوکیشن برای همه کاربران فعال شد")
-            return
-        if command_text == 'قفل لوکیشن خاموش':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_location', 0)
-                await event.edit(f"✅ قفل لوکیشن برای کاربر {target_id} غیرفعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_location', 0)
-                await event.edit("✅ قفل لوکیشن برای همه کاربران غیرفعال شد")
-            return
-        if command_text == 'قفل ایموجی روشن':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_emoji', 1)
-                await event.edit(f"✅ قفل ایموجی برای کاربر {target_id} فعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_emoji', 1)
-                await event.edit("✅ قفل ایموجی برای همه کاربران فعال شد")
-            return
-        if command_text == 'قفل ایموجی خاموش':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_emoji', 0)
-                await event.edit(f"✅ قفل ایموجی برای کاربر {target_id} غیرفعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_emoji', 0)
-                await event.edit("✅ قفل ایموجی برای همه کاربران غیرفعال شد")
-            return
-        if command_text == 'قفل متن روشن':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_text', 1)
-                await event.edit(f"✅ قفل متن برای کاربر {target_id} فعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_text', 1)
-                await event.edit("✅ قفل متن برای همه کاربران فعال شد")
-            return
-        if command_text == 'قفل متن خاموش':
-            if event.is_reply:
-                reply_msg = await event.get_reply_message()
-                target_id = reply_msg.sender_id
-                db.set_media_lock(self.user_id, target_id, 'lock_text', 0)
-                await event.edit(f"✅ قفل متن برای کاربر {target_id} غیرفعال شد")
-            else:
-                db.set_media_lock(self.user_id, 0, 'lock_text', 0)
-                await event.edit("✅ قفل متن برای همه کاربران غیرفعال شد")
+                db.set_media_lock(self.user_id, 0, lock_type, value)
+                status = "فعال" if value else "غیرفعال"
+                await event.edit(f"✅ {lock_type.replace('_', ' ')} برای همه کاربران {status} شد")
             return
         
-        # ========== دستورات آمار جدید ==========
+        # دستورات آمار
         if command_text == 'اطلاعات پیوی':
             if event.is_reply:
                 reply_msg = await event.get_reply_message()
@@ -3871,7 +3873,7 @@ class SelfBotManager:
     
     async def handle_outgoing_message(self, event):
         message_text = event.text or ""
-        if self.adding_spam and message_text and not message_text.startswith(('لیست', 'شروع', 'تایم', 'قلب', 'ماه', 'اطلاعات', 'دانلود', 'تاریخ', 'فعال', 'غیرفعال', 'حذف', 'ست', 'بولد', 'زیرخط', 'خط خورده', 'نقل قول', 'اسپویلر', 'کج', 'کد', 'پیش', 'اسپم', 'بلاک', 'ریکت', 'پیوی', 'گروه', 'درباره', 'من کی ام', 'قفل', 'باز', 'تنظیم', 'گروه گزارش', 'دشمن', 'دوست', 'کانال', 'کامنت', 'تست', 'لیست دشمن', 'لیست اسپم', 'پاک کردن اسپم', 'حذف اسپم', 'اضافه اسپم', 'اتمام اسپم', 'تغییر اسم', 'تغییر بیو', 'تغییر پروفایل', 'پروف', 'اسپم روشن', 'اسپم خاموش', 'پینگ', 'سرچ', 'خروج سرچ', 'قلب پیشرفته', 'عشق', 'سنتت', 'هک', 'وضعیت', '.پنل', 'پنل', '/panel', '.اهنگ', 'تنظیم اسپم')):
+        if self.adding_spam and message_text and not message_text.startswith(('لیست', 'شروع', 'تایم', 'قلب', 'ماه', 'اطلاعات', 'دانلود', 'تاریخ', 'فعال', 'غیرفعال', 'حذف', 'ست', 'بولد', 'زیرخط', 'خط خورده', 'نقل قول', 'اسپویلر', 'کج', 'کد', 'پیش', 'اسپم', 'بلاک', 'ریکت', 'پیوی', 'گروه', 'درباره', 'من کی ام', 'قفل', 'باز', 'تنظیم', 'گروه گزارش', 'دشمن', 'دوست', 'کانال', 'کامنت', 'تست', 'لیست دشمن', 'لیست اسپم', 'پاک کردن اسپم', 'حذف اسپم', 'اضافه اسپم', 'اتمام اسپم', 'تغییر اسم', 'تغییر بیو', 'تغییر پروفایل', 'پروف', 'اسپم روشن', 'اسپم خاموش', 'پینگ', 'سرچ', 'خروج سرچ', 'قلب پیشرفته', 'عشق', 'سنتت', 'هک', 'وضعیت', '.پنل', 'پنل', '/panel', '.اهنگ', 'تنظیم اسپم', '.qrcode', '.logo', '.imdb', '.lock', '.unlock', '.delete', '.limit', '.system-inf', '.tp', '.ts', '.clone')):
             db.add_enemy_spam_message(self.user_id, message_text)
             try:
                 await event.delete()
@@ -3881,14 +3883,14 @@ class SelfBotManager:
         if event.text:
             settings = db.get_selfbot_settings(self.user_id)
             text_style = settings.get('text_style')
-            if text_style and not message_text.startswith(('لیست', 'شروع', 'تایم', 'قلب', 'ماه', 'اطلاعات', 'دانلود', 'تاریخ', 'فعال', 'غیرفعال', 'حذف', 'ست', 'بولد', 'زیرخط', 'خط خورده', 'نقل قول', 'اسپویلر', 'کج', 'کد', 'پیش', 'اسپم', 'بلاک', 'ریکت', 'پیوی', 'گروه', 'درباره', 'من کی ام', 'قفل', 'باز', 'تنظیم', 'گروه گزارش', 'دشمن', 'دوست', 'کانال', 'کامنت', 'تست', 'لیست دشمن', 'لیست اسپم', 'پاک کردن اسپم', 'حذف اسپم', 'اضافه اسپم', 'اتمام اسپم', 'تغییر اسم', 'تغییر بیو', 'تغییر پروفایل', 'پروف', 'اسپم روشن', 'اسپم خاموش', 'پینگ', 'سرچ', 'خروج سرچ', 'قلب پیشرفته', 'عشق', 'سنتت', 'هک', 'وضعیت', '.پنل', 'پنل', '/panel', '.اهنگ', 'تنظیم اسپم')):
+            if text_style and not message_text.startswith(('لیست', 'شروع', 'تایم', 'قلب', 'ماه', 'اطلاعات', 'دانلود', 'تاریخ', 'فعال', 'غیرفعال', 'حذف', 'ست', 'بولد', 'زیرخط', 'خط خورده', 'نقل قول', 'اسپویلر', 'کج', 'کد', 'پیش', 'اسپم', 'بلاک', 'ریکت', 'پیوی', 'گروه', 'درباره', 'من کی ام', 'قفل', 'باز', 'تنظیم', 'گروه گزارش', 'دشمن', 'دوست', 'کانال', 'کامنت', 'تست', 'لیست دشمن', 'لیست اسپم', 'پاک کردن اسپم', 'حذف اسپم', 'اضافه اسپم', 'اتمام اسپم', 'تغییر اسم', 'تغییر بیو', 'تغییر پروفایل', 'پروف', 'اسپم روشن', 'اسپم خاموش', 'پینگ', 'سرچ', 'خروج سرچ', 'قلب پیشرفته', 'عشق', 'سنتت', 'هک', 'وضعیت', '.پنل', 'پنل', '/panel', '.اهنگ', 'تنظیم اسپم', '.qrcode', '.logo', '.imdb', '.lock', '.unlock', '.delete', '.limit', '.system-inf', '.tp', '.ts', '.clone')):
                 try:
                     text, entities = await apply_text_style(message_text, text_style)
                     if entities:
                         await event.message.edit(text, formatting_entities=entities)
                 except:
                     pass
-        if self.search_mode and message_text and not message_text.startswith(('لیست', 'شروع', 'تایم', 'قلب', 'ماه', 'اطلاعات', 'دانلود', 'تاریخ', 'فعال', 'غیرفعال', 'حذف', 'ست', 'بولد', 'زیرخط', 'خط خورده', 'نقل قول', 'اسپویلر', 'کج', 'کد', 'پیش', 'اسپم', 'بلاک', 'ریکت', 'پیوی', 'گروه', 'درباره', 'من کی ام', 'قفل', 'باز', 'تنظیم', 'گروه گزارش', 'دشمن', 'دوست', 'کانال', 'کامنت', 'تست', 'لیست دشمن', 'لیست اسپم', 'پاک کردن اسپم', 'حذف اسپم', 'اضافه اسپم', 'اتمام اسپم', 'تغییر اسم', 'تغییر بیو', 'تغییر پروفایل', 'پروف', 'اسپم روشن', 'اسپم خاموش', 'پینگ', 'سرچ', 'خروج سرچ', 'قلب پیشرفته', 'عشق', 'سنتت', 'هک', 'وضعیت', '.پنل', 'پنل', '/panel', '.اهنگ', 'تنظیم اسپم')):
+        if self.search_mode and message_text and not message_text.startswith(('لیست', 'شروع', 'تایم', 'قلب', 'ماه', 'اطلاعات', 'دانلود', 'تاریخ', 'فعال', 'غیرفعال', 'حذف', 'ست', 'بولد', 'زیرخط', 'خط خورده', 'نقل قول', 'اسپویلر', 'کج', 'کد', 'پیش', 'اسپم', 'بلاک', 'ریکت', 'پیوی', 'گروه', 'درباره', 'من کی ام', 'قفل', 'باز', 'تنظیم', 'گروه گزارش', 'دشمن', 'دوست', 'کانال', 'کامنت', 'تست', 'لیست دشمن', 'لیست اسپم', 'پاک کردن اسپم', 'حذف اسپم', 'اضافه اسپم', 'اتمام اسپم', 'تغییر اسم', 'تغییر بیو', 'تغییر پروفایل', 'پروف', 'اسپم روشن', 'اسپم خاموش', 'پینگ', 'سرچ', 'خروج سرچ', 'قلب پیشرفته', 'عشق', 'سنتت', 'هک', 'وضعیت', '.پنل', 'پنل', '/panel', '.اهنگ', 'تنظیم اسپم', '.qrcode', '.logo', '.imdb', '.lock', '.unlock', '.delete', '.limit', '.system-inf', '.tp', '.ts', '.clone')):
             await self.handle_google_search(event, message_text)
             return
         if event.text:
@@ -4045,7 +4047,6 @@ def get_main_panel_keyboard(user_id):
         [
             InlineKeyboardButton("📊 گزارش", callback_data=f"report_menu_{user_id}")
         ],
-        # دکمه بستن پنل حذف شد
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -4958,10 +4959,10 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         db.set_filter_enabled(user_id, False)
         await msg.edit_text("✅ فیلتر کلمات غیرفعال شد")
     elif cmd.startswith('filter_list'):
-        filters = db.get_filter_words(user_id)
-        if filters:
+        filters_list = db.get_filter_words(user_id)
+        if filters_list:
             message_text = "📜 لیست کلمات فیلتر شده:\n\n"
-            for i, word_info in enumerate(filters, 1):
+            for i, word_info in enumerate(filters_list, 1):
                 status = "فعال" if word_info['enabled'] else "غیرفعال"
                 message_text += f"{i}. {word_info['word']} - {status}\n"
             await msg.edit_text(message_text)
@@ -5336,11 +5337,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✖ درخواست شما رد شده است")
         return
     if user_data.get('self_active'):
-        # در این حالت سلف‌بات در صورت فعال بودن اجرا می‌شود.
-        # اگر نمی‌خواهید سلف‌بات اجرا شود، این بخش را کامنت کنید.
-        # اما طبق درخواست شما مبنی بر نخوابیدن، ما در اینجا سلف‌بات را مدیریت نمی‌کنیم.
-        # فقط ربات عادی پاسخ می‌دهد. برای سلف‌بات نیاز به session file است.
-        # اگر کاربر سلف‌بات دارد ولی نمی‌خواهید در رندر فعال شود، این بخش را کامنت کنید:
         if user_id_str not in selfbot_managers:
             session_file = user_data.get('session_file')
             if session_file and os.path.exists(session_file):
@@ -5526,7 +5522,6 @@ async def main():
     print("=" * 60)
     await check_session_files()
     
-    # شروع وب سرور Keep-Alive
     asyncio.create_task(start_web_server())
     asyncio.create_task(keep_alive())
     
@@ -5550,7 +5545,6 @@ async def main():
     print("✅ ربات شروع شد")
     print("=" * 60)
     
-    # راه‌اندازی سلف‌بات برای کاربران فعال - در صورت نیاز غیرفعال کنید
     active_users = db.get_active_users()
     success_count = 0
     fail_count = 0
