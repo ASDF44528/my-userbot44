@@ -1,4 +1,3 @@
-
 import os
 import sqlite3
 import logging
@@ -9,11 +8,13 @@ import time
 import requests
 import random
 import uuid
+import threading
 from datetime import datetime, timedelta
 from urllib.parse import quote
 import pytz
 import jdatetime
 from hijridate import Gregorian
+from flask import Flask, jsonify
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, InlineQueryHandler
 from telegram.request import HTTPXRequest
@@ -26,13 +27,38 @@ from telethon.tl.functions.contacts import BlockRequest
 from telethon.tl.functions.users import GetFullUserRequest
 from telethon.errors import MessageDeleteForbiddenError, FloodWaitError, SessionPasswordNeededError, FloodWaitError as TelethonFloodWaitError
 
+# ========== تنظیمات وب سرور برای Render (پورت 10000) ==========
+flask_app = Flask(__name__)
+
+@flask_app.route('/')
+def home():
+    return jsonify({
+        "status": "running",
+        "bot": "Gap_5_bot",
+        "version": "4.5.0"
+    })
+
+@flask_app.route('/health')
+def health():
+    return jsonify({"status": "healthy"}), 200
+
+@flask_app.route('/ping')
+def ping():
+    """مسیر مخصوص جلوگیری از خواب ربات"""
+    return jsonify({"status": "alive", "message": "Bot is awake"}), 200
+
+def run_web_server():
+    """اجرای سرور وب برای Render روی پورت 10000"""
+    port = int(os.environ.get("PORT", 10000))
+    logger.info(f"🚀 وب سرور روی پورت {port} در حال اجراست")
+    flask_app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+
 # ========== تنظیم زمان ایران برای کل سیستم ==========
 os.environ['TZ'] = 'Asia/Tehran'
 try:
     time.tzset()
 except:
     pass
-
 
 # ========== تنظیمات گوگل سرچ ==========
 GOOGLE_SEARCH_API_KEY = "AIzaSyCMYOU0NpU5xfu7GrffyywVUugd1yD2uDU"
@@ -86,10 +112,9 @@ def get_user_api(user_id):
     logger.info(f"API اختصاص یافته به کاربر {user_id}: {best_api['api_id']}")
     return best_api
 
-# توکن جدید
-BOT_TOKEN = "8996374125:AAG9ZBrr7Io5wdFR-J9YDjS1Tx7WRg7H10A"
+BOT_TOKEN = "8304449635:AAEIlwvuBaMh_vfpMMOKGcBZMEU29xf0Qwc"
 ADMIN_ID = 6443963679
-BOT_USERNAME = "Gap_6_bot"
+BOT_USERNAME = "Gap_5_bot"
 MUSIC_BOT = "Gap_4_bot"
 
 # ========== پوشه سشن‌ها ==========
@@ -153,7 +178,7 @@ classic_fonts = [
     "𝟶𝟷𝟸𝟹𝟺𝟻𝟼𝟽𝟾𝟿",
     "𝟬𝟭𝟮𝟯𝟰𝟱𝟲𝟳𝟴𝟵",
     {'0': '0', '1': '1', '2': '2', '3': '3', '4': '4', '5': '5', '6': '6', '7': '7', '8': '8', '9': '9', ':': ':'},
-    {'0': '𝟎', '1': '𝟏', '2': '𝟐', '3': '𝟃', '4': '𝟄', '5': '𝟅', '6': '𝟆', '7': '𝟇', '8': '𝟈', '9': '𝟉', ':': ':'},
+    {'0': '𝟎', '1': '𝟏', '2': '𝟐', '3': '𝟑', '4': '𝟒', '5': '𝟓', '6': '𝟔', '7': '𝟕', '8': '𝟖', '9': '𝟗', ':': ':'},
     {'0': '𝟶', '1': '𝟷', '2': '𝟸', '3': '𝟹', '4': '𝟺', '5': '𝟻', '6': '𝟼', '7': '𝟽', '8': '𝟾', '9': '𝟿', ':': ':'},
     {'0': '⓪', '1': '①', '2': '②', '3': '③', '4': '④', '5': '⑤', '6': '⑥', '7': '⑦', '8': '⑧', '9': '⑨', ':': ':'},
     {'0': '🄋', '1': '➊', '2': '➋', '3': '➌', '4': '➍', '5': '➎', '6': '➏', '7': '➐', '8': '➑', '9': '➒', ':': ':'},
@@ -370,7 +395,6 @@ class MainDatabase:
         conn = sqlite3.connect(self.db_name)
         cursor = conn.cursor()
         
-        # ایجاد جدول media_locks با همه ستون‌ها
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS media_locks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1593,8 +1617,6 @@ class SelfBotManager:
                 logger.info(f"هندلرها برای کاربر {self.user_id} تنظیم شدند")
             
             asyncio.create_task(self.update_profile_task())
-            # ========== اضافه کردن keep-alive ==========
-            asyncio.create_task(self.keep_alive())
             
             self.running = True
             self.connection_attempts = 0
@@ -1638,16 +1660,6 @@ class SelfBotManager:
             
         except Exception as e:
             logger.error(f"خطا در توقف سلف‌بات برای کاربر {self.user_id}: {e}")
-    
-    async def keep_alive(self):
-        """هر 60 ثانیه یکبار درخواست میفرسته تا سلف‌بات قطع نشه"""
-        while self.running:
-            try:
-                await self.client.get_me()
-                logger.info(f"💓 Self-bot keep-alive signal sent for {self.user_id}")
-            except Exception as e:
-                logger.error(f"❌ Keep-alive error for {self.user_id}: {e}")
-            await asyncio.sleep(60)  # هر 60 ثانیه
     
     def setup_handlers(self):
         try:
@@ -6041,4 +6053,14 @@ async def main():
         await app.shutdown()
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    # راه‌اندازی وب سرور در یک ترد جداگانه
+    web_thread = threading.Thread(target=run_web_server, daemon=True)
+    web_thread.start()
+    
+    # اجرای ربات اصلی
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("🛑 ربات متوقف شد")
+    except Exception as e:
+        logger.error(f"❌ خطای fatal: {e}")
