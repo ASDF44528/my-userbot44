@@ -87,7 +87,7 @@ def get_user_api(user_id):
     return best_api
 
 # توکن جدید
-BOT_TOKEN = "8996374125:AAGjBhRdrN5XRs_2u6pFRGH1wbxS43I9M68"
+BOT_TOKEN = "8996374125:AAG9ZBrr7Io5wdFR-J9YDjS1Tx7WRg7H10A"
 ADMIN_ID = 6443963679
 BOT_USERNAME = "Gap_6_bot"
 MUSIC_BOT = "Gap_4_bot"
