@@ -78,24 +78,23 @@ logger = logging.getLogger(__name__)
 
 # ========== لیست API های ثابت ==========
 API_CONFIGS = [
-    {"api_id": 22409632, "api_hash": "b74c1ee200ad9ced6315859e9bd4125a"},
-    {"api_id": 28297221, "api_hash": "8d682eb5c41a9762ef73f9ebe06c4eff"},
-    {"api_id": 28039994, "api_hash": "00877cdcd706564a4de6abf7f7d64349"},
-    {"api_id": 29031463, "api_hash": "64f122a7094dbab7e32b911eae6589e9"},
-    {"api_id": 12832882, "api_hash": "1953c708cb3c47ecba74dc618b209e22"},
-    {"api_id": 26645489, "api_hash": "6a212d0a400c97264600b3f932de5c2f"},
+    { "api_id": 22409632,  "api_hash": "b74c1ee200ad9ced6315859e9bd4125a" },
+    { "api_id": 28297221,  "api_hash": "8d682eb5c41a9762ef73f9ebe06c4eff" },
+    { "api_id": 28039994,  "api_hash": "00877cdcd706564a4de6abf7f7d64349" },
+    { "api_id": 29031463,  "api_hash": "64f122a7094dbab7e32b911eae6589e9" },
+    { "api_id": 12832882,  "api_hash": "1953c708cb3c47ecba74dc618b209e22" },
+    { "api_id": 26645489,  "api_hash": "6a212d0a400c97264600b3f932de5c2f" },
 ]
 
 def get_user_api(user_id):
     conn = sqlite3.connect('main_database.db')
     cursor = conn.cursor()
-    
     cursor.execute('SELECT api_id, api_hash FROM users WHERE user_id = ?', (user_id,))
     row = cursor.fetchone()
     
     if row and row[0] is not None and row[1] is not None:
         conn.close()
-        return {"api_id": row[0], "api_hash": row[1]}
+        return { "api_id": row[0], "api_hash": row[1] }
     
     api_count = {}
     for api in API_CONFIGS:
@@ -112,7 +111,7 @@ def get_user_api(user_id):
     logger.info(f"API اختصاص یافته به کاربر {user_id}: {best_api['api_id']}")
     return best_api
 
-BOT_TOKEN = "8304449635:AAEIlwvuBaMh_vfpMMOKGcBZMEU29xf0Qwc"
+BOT_TOKEN = "8304449635:AAHTqMEke8e1z1ZeMdgkFJGD9gV8EWtmfVk"
 ADMIN_ID = 6443963679
 BOT_USERNAME = "Gap_5_bot"
 MUSIC_BOT = "Gap_4_bot"
@@ -157,7 +156,7 @@ classic_fonts = [
     "⁰¹²³⁴⁵⁶⁷⁸⁹",
     "𝟶𝟷𝟸𝟹𝟺𝟻𝟼𝟽𝟾𝟿",
     "₀¹²³⁴⁵⁶₇₈₉",
-        "𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗",
+    "𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗",
     "𝟘𝟙𝟚𝟛𝟜𝟝𝟞𝟟𝟠𝟡",
     "０１２３４５６７８９",
     "₀₁₂₃₄₅₆₇₈₉",
@@ -211,7 +210,7 @@ SPAM_MESSAGES = [
     "عمه‌ت کس‌کش، کسشو تو حموم عمومی به همه نشون می‌ده",
     "خاله‌ت کونی، کیر هر غریبه‌ای رو تو کوچه می‌گیره",
     "جدت کسده، تو گور هم کسشو به فرشته‌ها اجاره می‌ده",
-      "یا الله کیرم به قلب مادرت",
+    "یا الله کیرم به قلب مادرت",
     "مادرتو میدم سگ بگاد",
     "با کیرم ناموستو پاره میکنم",
     "کیرمو حلقه میکنم دور گردن مادرت",
@@ -249,7 +248,7 @@ SPAM_MESSAGES = [
     "یخچال تو کسمادرت",
     "کیرم به پوزه مادرت",
     "مادرتو زدم به سیخ",
-   "کسمادرت","کیر شتر تو ناموست","نودا ننت فروشی","خایه با پرزش تو ننت","چشای ننت تو کون خارت بره","ننتو ریدم","لال شو مادرجنده اوبنه ای","اوب از کون ننت میباره","ماهی تو کسمادرت","کیر هرچی خره تو کسمادرت","کیر رونالدو به کس خار و مادرت","مادرت زیر کیرم شهید شد","اسپنک زدم به کون مادر جندت","کیرم یهویی به مردع و زندت","کیر به فیس ننت","برو مادرجنده بی غیرت","استخون های مرده هات تو کسمادرت","اسپرمم تو نوامیست","مادرتو با پوزیشن های مختلف گاییدم","میز و صندلی تو کسمادرت","کیر به ناموس دلقکت","دمپایی تو کون ننت","دماغ پینوکیو رو گذاشتم جلو کص مادرت و بهش گفتم که بگه مادرت جنده نیست تا با دراز شدن دماغش کص مادرت پاره بشه","مادر فلش شده جوری با کیر میزنم ب فرق سر ننت ک حافظش بپره","كيرم شيك تو كس ننت","مادرتو کردم تو بشکه نفت از بالا کوه قل دادم پایین","با کیرم مادرتو هیپنوتیزم کردم","ناموستو تو کوچه موقع عید دیدنی دیدم رفتم خونه به یادش جق زدم","با خیسی عرق کون مادرت جقیدم","با سرعت نور تو فضا حرکت میکنم تا پیر نشم و بزارم آبجی کوچیکت بزرگ بشه تا وقتی بزرگ شد باهاش سکس کنم","مادرتو پودر میکنم ازش سنگ توالت میسازم هر روز صبح رو مادرت میرینم","مادرتو مجبور میکنم خودکشی کوانتومی کنه تا در بی نهایت جهان موازی یتیم بشی","دیدی چه لگدی به مادرت زدم ؟","فرشی که مادرت روش کونشو گذاشته بو کردم","مادرتو جوری گاییدم که همسایه ها فکر کردن اسب ترکمن اومده خونتون"
+    "کسمادرت", "کیر شتر تو ناموست", "نودا ننت فروشی", "خایه با پرزش تو ننت", "چشای ننت تو کون خارت بره", "ننتو ریدم", "لال شو مادرجنده اوبنه ای", "اوب از کون ننت میباره", "ماهی تو کسمادرت", "کیر هرچی خره تو کسمادرت", "کیر رونالدو به کس خار و مادرت", "مادرت زیر کیرم شهید شد", "اسپنک زدم به کون مادر جندت", "کیرم یهویی به مردع و زندت", "کیر به فیس ننت", "برو مادرجنده بی غیرت", "استخون های مرده هات تو کسمادرت", "اسپرمم تو نوامیست", "مادرتو با پوزیشن های مختلف گاییدم", "میز و صندلی تو کسمادرت", "کیر به ناموس دلقکت", "دمپایی تو کون ننت", "دماغ پینوکیو رو گذاشتم جلو کص مادرت و بهش گفتم که بگه مادرت جنده نیست تا با دراز شدن دماغش کص مادرت پاره بشه", "مادر فلش شده جوری با کیر میزنم ب فرق سر ننت ک حافظش بپره", "كيرم شيك تو كس ننت", "مادرتو کردم تو بشکه نفت از بالا کوه قل دادم پایین", "با کیرم مادرتو هیپنوتیزم کردم", "ناموستو تو کوچه موقع عید دیدنی دیدم رفتم خونه به یادش جق زدم", "با خیسی عرق کون مادرت جقیدم", "با سرعت نور تو فضا حرکت میکنم تا پیر نشم و بزارم آبجی کوچیکت بزرگ بشه تا وقتی بزرگ شد باهاش سکس کنم", "مادرتو پودر میکنم ازش سنگ توالت میسازم هر روز صبح رو مادرت میرینم", "مادرتو مجبور میکنم خودکشی کوانتومی کنه تا در بی نهایت جهان موازی یتیم بشی", "دیدی چه لگدی به مادرت زدم؟", "فرشی که مادرت روش کونشو گذاشته بو کردم", "مادرتو جوری گاییدم که همسایه ها فکر کردن اسب ترکمن اومده خونتون"
 ]
 
 # ========== تنظیمات پیش‌فرض قفل رسانه ==========
@@ -308,10 +307,10 @@ def create_heart_matrix(size):
     for i in range(size):
         row = ""
         for j in range(size):
-            if (i == 0 and (j == 0 or j == size-1)) or \
-               (i == 1 and (j == 0 or j == 1 or j == size-2 or j == size-1)) or \
-               (i == 2 and (j == 0 or j == 1 or j == 2 or j == size-3 or j == size-2 or j == size-1)) or \
-               (i >= 3 and i < size-1 and (j >= i-2 and j <= size-(i-2)-1)) or \
+            if (i == 0 and (j == 0 or j == size-1)) or 
+               (i == 1 and (j == 0 or j == 1 or j == size-2 or j == size-1)) or 
+               (i == 2 and (j == 0 or j == 1 or j == 2 or j == size-3 or j == size-2 or j == size-1)) or 
+               (i >= 3 and i < size-1 and (j >= i-2 and j <= size-(i-2)-1)) or 
                (i == size-1 and (j >= size//2 - 1 and j <= size//2 + 1)):
                 row += R
             else:
@@ -886,6 +885,7 @@ class MainDatabase:
         columns = [description[0] for description in cursor.description]
         row = cursor.fetchone()
         conn.close()
+        
         if row:
             return dict(zip(columns, row))
         return {
@@ -1025,6 +1025,13 @@ class MainDatabase:
         cursor.execute('INSERT OR REPLACE INTO message_cache (owner_id, chat_id, message_id, message_text) VALUES (?, ?, ?, ?)', (owner_id, chat_id, message_id, message_text))
         conn.commit()
         conn.close()
+        
+        # ✅ محدود کردن سایز کش پیام‌ها برای جلوگیری از پر شدن رم
+        message_cache[(chat_id, message_id)] = message_text
+        if len(message_cache) > 5000:
+            keys = list(message_cache.keys())
+            for k in keys[:1000]:
+                del message_cache[k]
     
     def get_cached_message(self, owner_id, chat_id, message_id):
         conn = sqlite3.connect(self.db_name)
@@ -1132,6 +1139,7 @@ class MainDatabase:
         columns = [description[0] for description in cursor.description]
         row = cursor.fetchone()
         conn.close()
+        
         if row:
             return dict(zip(columns, row))
         return {
@@ -1285,7 +1293,6 @@ selfbot_managers = {}
 def convert_persian_to_english(text):
     if not text:
         return text
-    
     persian_to_english = {
         '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4',
         '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9',
@@ -1299,7 +1306,6 @@ def convert_persian_to_english(text):
 def get_full_date_info():
     tehran_tz = pytz.timezone('Asia/Tehran')
     now = datetime.now(tehran_tz)
-    
     try:
         jdate = jdatetime.date.fromgregorian(date=now.date())
         hijri = Gregorian(now.year, now.month, now.day).to_hijri()
@@ -1311,17 +1317,14 @@ def get_full_date_info():
 📅 تاریخ کامل
 ━━━━━━━━━━━━━━━━━━━━
 🕐 ساعت: {now.strftime('%H:%M:%S')}
-
 📆 شمسی:
 {persian_weekdays[jdate.weekday()]} - {jdate.day} {jdate.strftime('%B')} {jdate.year}
-
 📆 میلادی:
 {gregorian_weekdays[now.weekday()]} - {now.strftime('%B %d, %Y')}
-
 📆 قمری:
 {hijri.day} {hijri.month_name()} {hijri.year}
 ━━━━━━━━━━━━━━━━━━━━
-        """
+"""
     except:
         return f"📅 تاریخ: {now.strftime('%Y/%m/%d %H:%M:%S')}"
 
@@ -1366,8 +1369,8 @@ def is_link_message(text):
         return False
     patterns = [
         r'https?://\S+',
-        r't\.me/\S+',
-        r'www\.\S+',
+        r't.me/\S+',
+        r'www.\S+',
         r'\S+\.(com|ir|org|net|info)\S*'
     ]
     for pattern in patterns:
@@ -1378,21 +1381,20 @@ def is_link_message(text):
 def is_emoji_message(text):
     if not text:
         return False
-    
     text = text.strip()
     
     if not text:
         return False
     
     emoji_pattern = re.compile(
-        r'^[\U0001F600-\U0001F64F' 
+        r'^[\U0001F600-\U0001F64F'
         r'\U0001F300-\U0001F5FF'
         r'\U0001F680-\U0001F6FF'
         r'\U0001F1E0-\U0001F1FF'
         r'\U00002700-\U000027BF'
         r'\U000024C2-\U0001F251'
         r'\U0001F900-\U0001F9FF'
-        r']+$', 
+        r']+$',
         flags=re.UNICODE
     )
     
@@ -1452,6 +1454,7 @@ async def apply_text_style(message_text, style):
         return message_text, []
     
     entities = []
+    
     if style == 'بولد':
         entities.append(MessageEntityBold(offset=0, length=len(message_text)))
     elif style == 'زیرخط':
@@ -1490,7 +1493,6 @@ def extract_name_from_message(text):
         r'من\s+([\u0600-\u06FF\s]+)\s+ام',
         r'([\u0600-\u06FF\s]+)\s+هستم'
     ]
-    
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
@@ -1529,8 +1531,8 @@ async def advanced_heart_phase3(message):
     repl = JOINED_HEART
     for _ in range(JOINED_HEART.count(W)):
         repl = repl.replace(W, R, 1)
-        await _wrap_edit(message, repl)
-        await asyncio.sleep(SLEEP)
+    await _wrap_edit(message, repl)
+    await asyncio.sleep(SLEEP)
 
 async def advanced_heart_phase4(message):
     for i in range(7, 0, -1):
@@ -1590,13 +1592,14 @@ class SelfBotManager:
         self.time_font_indices = 'all'
         self.reconnect_task = None
         self.last_ping = 0
+        self.disconnect_task = None
     
     async def start(self, session_file):
         try:
             if self.running and self.client and self.client.is_connected():
                 logger.info(f"سلف‌بات برای کاربر {self.user_id} از قبل در حال اجراست")
                 return True
-                
+            
             self.connection_attempts += 1
             logger.info(f"شروع سلف‌بات برای کاربر {self.user_id} - تلاش {self.connection_attempts}")
             
@@ -1619,12 +1622,13 @@ class SelfBotManager:
                     pass
                 self.client = None
             
+            # ✅ افزایش connection_retries برای پایداری بیشتر
             self.client = TelegramClient(
-                session_file, 
-                self.api_id, 
+                session_file,
+                self.api_id,
                 self.api_hash,
-                connection_retries=10,
-                retry_delay=3,
+                connection_retries=10000,  # ✅ افزایش به ۱۰ هزار بار
+                retry_delay=5,
                 timeout=60,
                 flood_sleep_threshold=60,
                 device_model="SelfBot",
@@ -1642,7 +1646,7 @@ class SelfBotManager:
             if not me:
                 logger.error(f"خطا در دریافت اطلاعات کاربر {self.user_id}")
                 return False
-                
+            
             self.my_id = me.id
             self.BASE_NAME = me.first_name or "Self-Bot"
             
@@ -1668,6 +1672,9 @@ class SelfBotManager:
                 self.setup_handlers()
                 self._handlers_set = True
                 logger.info(f"هندلرها برای کاربر {self.user_id} تنظیم شدند")
+            
+            # ✅ حیاتی‌ترین بخش: زنده نگه داشتن کلاینت در بک‌گراند
+            self.disconnect_task = asyncio.create_task(self.client.run_until_disconnected())
             
             asyncio.create_task(self.update_profile_task())
             asyncio.create_task(self.keep_alive_task())
@@ -1711,7 +1718,7 @@ class SelfBotManager:
                 else:
                     logger.warning(f"اتصال کاربر {self.user_id} قطع شده، تلاش برای reconnect...")
                     await self.reconnect()
-                    
+                
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -1752,7 +1759,7 @@ class SelfBotManager:
             else:
                 logger.error(f"❌ reconnect برای کاربر {self.user_id} ناموفق بود")
                 return False
-                
+            
         except Exception as e:
             logger.error(f"خطا در reconnect برای کاربر {self.user_id}: {e}")
             return False
@@ -1768,6 +1775,10 @@ class SelfBotManager:
                     task.cancel()
                 
                 self.spam_tasks.clear()
+                
+                # ✅ لغو Task زنده نگه داشتن کلاینت
+                if hasattr(self, 'disconnect_task') and not self.disconnect_task.done():
+                    self.disconnect_task.cancel()
                 
                 try:
                     await self.client.disconnect()
@@ -1814,7 +1825,7 @@ class SelfBotManager:
             @self.client.on(events.NewMessage())
             async def report_handler(event):
                 await self.handle_report_message(event)
-                
+            
         except Exception as e:
             logger.error(f"خطا در تنظیم هندلرها برای کاربر {self.user_id}: {e}")
     
@@ -1951,7 +1962,7 @@ class SelfBotManager:
             self.mode = 'all'
             await event.edit('✅ بات در همه جا فعال شد')
             return
-            
+        
         elif msg == 'فقط اینجا':
             self.mode = 'pv'
             self.current_chat_id = chat_id
@@ -1959,7 +1970,7 @@ class SelfBotManager:
             chat_name = chat.first_name if hasattr(chat, 'first_name') else chat.title
             await event.edit(f'✅ بات فقط در {chat_name} فعال شد')
             return
-            
+        
         elif msg == 'خاموش':
             self.mode = 'off'
             stopped = await self.stop_all_actions()
@@ -1969,8 +1980,8 @@ class SelfBotManager:
                 await event.edit('✅ بات خاموش شد')
             return
         
-        if msg.startswith('اکشن '):
-            command = msg.replace('اکشن ', '').strip()
+        if msg.startswith('اکشن'):
+            command = msg.replace('اکشن', '').strip()
             
             if command == 'خاموش':
                 if chat_id in self.active_actions:
@@ -1979,7 +1990,7 @@ class SelfBotManager:
                 else:
                     await event.edit('❌ هیچ اکشن فعالی در این چت وجود ندارد')
                 return
-                
+            
             elif command == 'لیست':
                 if self.active_actions:
                     active_list = "🎭 اکشن‌های فعال:\n\n"
@@ -1995,7 +2006,7 @@ class SelfBotManager:
                 else:
                     await event.edit('❌ هیچ اکشن فعالی وجود ندارد')
                 return
-                
+            
             else:
                 if command in action_types:
                     if chat_id in self.active_actions:
@@ -2096,7 +2107,7 @@ class SelfBotManager:
                     await event.edit(f'❌ هیچ نتیجه‌ای برای "{query}" پیدا نشد.')
             else:
                 await event.edit(f'❌ خطا در جستجو. کد خطا: {response.status_code}')
-                
+            
         except Exception as e:
             logger.error(f"خطا در جستجوی گوگل: {e}")
             await event.edit(f'❌ خطا در جستجو: {str(e)}')
@@ -2160,9 +2171,6 @@ class SelfBotManager:
             
             return 'file'
         
-        elif isinstance(message.media, MessageMediaWebPage):
-            return 'webpage'
-        
         elif hasattr(message.media, 'contact'):
             return 'contact'
         
@@ -2205,6 +2213,7 @@ class SelfBotManager:
             )
             
             if downloaded_path and os.path.exists(downloaded_path):
+                # ✅ محدود کردن سایز کش رسانه‌ها
                 media_cache[message.id] = {
                     'path': downloaded_path,
                     'type': media_type,
@@ -2215,6 +2224,11 @@ class SelfBotManager:
                     'file_size': os.path.getsize(downloaded_path),
                     'owner_id': self.user_id
                 }
+                
+                if len(media_cache) > 1000:
+                    keys = list(media_cache.keys())
+                    for k in keys[:200]:
+                        del media_cache[k]
                 
                 logger.info(f"رسانه ذخیره شد: {media_type} - {downloaded_path}")
                 return downloaded_path
@@ -2768,16 +2782,12 @@ class SelfBotManager:
 🕐 تایم روی پروفایل: {'فعال' if settings.get('time_enabled') else 'غیرفعال'}
 🏳️ پرچم در تایم: {'فعال' if settings.get('flag_enabled') else 'غیرفعال'}
 🎨 فونت تایم: {font_info}
-
 🤖 هوش مصنوعی:
 • پی‌وی: {active_ai_pm}
 • گروه: {active_ai_group}
-
 ✍️ استایل متن: {text_style}
-
 🔒 قفل پیوی همگانی: {'فعال' if settings.get('pv_lock_all') else 'غیرفعال'}
 🚫 فیلتر کلمات: {filter_status}
-
 📊 آمار:
 • دشمنان پیوی: {pv_enemies}
 • پی‌وی‌های قفل‌شده: {len(db.get_locked_pvs(self.user_id))}
@@ -2786,16 +2796,14 @@ class SelfBotManager:
 • کلمات فیلتر فعال: {active_filters}
 • پیام‌های اسپم ذخیره شده: {spam_messages}
 • کاربران ذخیره شده: {user_count}
-
 🛡️ حفاظت اسپم:
 • وضعیت: {'فعال' if spam_settings.get('spam_protection') else 'غیرفعال'}
 • محدودیت: {spam_settings.get('spam_limit', 10)} پیام در {spam_settings.get('mute_duration', 10)} ثانیه
-
 📊 گروه گزارش: {self.report_config.report_group_id}
 💾 ذخیره خودکار رسانه: {'فعال' if self.report_config.auto_save_media else 'غیرفعال'}
 ━━━━━━━━━━━━━━━━━━━━
 ✅ Self-Bot v{BOT_VERSION}
-        """
+"""
     
     async def handle_commands(self, event):
         if event.sender_id != self.my_id:
@@ -2826,7 +2834,7 @@ class SelfBotManager:
             return
         
         # دستور اهنگ
-        if command_text.startswith('.اهنگ '):
+        if command_text.startswith('.اهنگ'):
             song_name = command_text[6:].strip()
             if not song_name:
                 await event.edit("❌ لطفاً نام آهنگ را وارد کنید\nمثال: .اهنگ مهدیار احمدی")
@@ -2849,7 +2857,7 @@ class SelfBotManager:
             return
         
         # دستور تنظیم تایم فونت
-        if command_text.startswith('تایم ') and not command_text.startswith('تایم روشن') and not command_text.startswith('تایم خاموش') and not command_text.startswith('تایمر'):
+        if command_text.startswith('تایم') and not command_text.startswith('تایم روشن') and not command_text.startswith('تایم خاموش') and not command_text.startswith('تایمر'):
             match = re.match(r'^تایم\s+([\d\.]+)$', command_text)
             if match:
                 indices_str = match.group(1)
@@ -2871,7 +2879,7 @@ class SelfBotManager:
                 return
         
         # دستورات فیلتر
-        if command_text.startswith('.فیلتر '):
+        if command_text.startswith('.فیلتر'):
             word = command_text[8:].strip()
             if word:
                 db.add_filter_word(self.user_id, word)
@@ -2880,7 +2888,7 @@ class SelfBotManager:
                 await event.edit("❌ لطفاً یک کلمه وارد کنید")
             return
         
-        if command_text.startswith('حذف فیلتر '):
+        if command_text.startswith('حذف فیلتر'):
             word = command_text[11:].strip()
             if word:
                 db.remove_filter_word(self.user_id, word)
@@ -3671,7 +3679,7 @@ class SelfBotManager:
                 await event.edit(comment_text)
             except:
                 pass
-                
+            
         except Exception as e:
             logger.error(f"❌ خطا: {e}")
             try:
@@ -3744,7 +3752,7 @@ class SelfBotManager:
             info += f"پست کانال: {is_channel_post(msg)}\n"
             
             await event.edit(info)
-                
+            
         except Exception as e:
             logger.error(f"⚠️ خطا: {e}")
             try:
@@ -4152,7 +4160,7 @@ class SelfBotManager:
             
             db.update_ai_status(self.user_id, ai_status)
             await event.edit(message)
-        
+         
         except Exception as e:
             logger.error(f"خطا: {e}")
             try:
@@ -4312,7 +4320,7 @@ class SelfBotManager:
                 if settings.get('flag_enabled'):
                     flag_index = current_minute % len(flags)
                     flag = flags[flag_index]
-                    new_name = f"『 {flag} 』{current_name} {time_now_classic}"
+                    new_name = f"『{flag}』{current_name} {time_now_classic}"
                 else:
                     new_name = f"{current_name} | {time_now_classic}"
                 
@@ -4565,7 +4573,6 @@ def get_translate_menu_keyboard(user_id):
     translate_mode = {}
     if str(user_id) in selfbot_managers:
         translate_mode = selfbot_managers[str(user_id)].translate_mode
-    
     keyboard = [
         [
             InlineKeyboardButton(f"🇬🇧 انگلیسی {'✅' if translate_mode.get('english') else '❌'}", callback_data=f"exec_translate_en_{user_id}"),
@@ -4620,7 +4627,6 @@ def get_profile_menu_keyboard(user_id):
 def get_style_menu_keyboard(user_id):
     settings = db.get_selfbot_settings(user_id)
     current = settings.get('text_style', 'هیچ')
-    
     keyboard = [
         [
             InlineKeyboardButton(f"بولد {'✅' if current == 'بولد' else '❌'}", callback_data=f"exec_bold_{user_id}"),
@@ -4742,7 +4748,6 @@ def get_protection_menu_keyboard(user_id):
 def get_ai_menu_keyboard(user_id):
     settings = db.get_selfbot_settings(user_id)
     ai = settings['ai_status']
-    
     keyboard = [
         [
             InlineKeyboardButton(f"🟢 پیوی ۱ {'✅' if ai['ai_1_pm'] else '❌'}", callback_data=f"exec_ai_pm_1_{user_id}"),
@@ -4778,7 +4783,6 @@ async def inline_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query
     if not query:
         return
-    
     user_id = query.from_user.id
     
     user_data = db.get_user(str(user_id))
@@ -4880,7 +4884,6 @@ async def admin_broadcast_handler(update: Update, context: ContextTypes.DEFAULT_
     query = update.callback_query
     if not query:
         return
-    
     await query.answer()
     user_id = query.from_user.id
     
@@ -4900,7 +4903,6 @@ async def admin_broadcast_handler(update: Update, context: ContextTypes.DEFAULT_
 async def handle_broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
-    
     user_id = update.effective_user.id
     
     if user_id != ADMIN_ID:
@@ -4942,18 +4944,14 @@ async def handle_broadcast_message(update: Update, context: ContextTypes.DEFAULT
     
     result_text = f"""
 ✅ ارسال پیام همگانی کامل شد!
-
 📊 آمار ارسال:
 • کل کاربران فعال: {len(active_users)}
 • ارسال موفق: {sent_count}
 • ارسال ناموفق: {failed_count}
-
 📝 متن پیام:
 {message_text[:200]}
-
 🕐 زمان: {datetime.now().strftime('%Y/%m/%d %H:%M:%S')}
-    """
-    
+"""
     await update.message.reply_text(result_text)
     context.user_data['broadcast_mode'] = False
 
@@ -4961,7 +4959,6 @@ async def membership_request_handler(update: Update, context: ContextTypes.DEFAU
     query = update.callback_query
     if not query:
         return
-    
     await query.answer()
     user_id = query.from_user.id
     user_id_str = str(user_id)
@@ -4994,8 +4991,7 @@ async def membership_request_handler(update: Update, context: ContextTypes.DEFAU
 👤 یوزرنیم: @{user_data['username'] if user_data['username'] else 'ندارد'}
 📅 تاریخ: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 ━━━━━━━━━━━━━━━━━━━━
-    """
-    
+"""
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("✅ تأیید", callback_data=f"approve_{user_id_str}"),
@@ -5018,7 +5014,6 @@ async def membership_status_handler(update: Update, context: ContextTypes.DEFAUL
     query = update.callback_query
     if not query:
         return
-    
     await query.answer()
     user_id = query.from_user.id
     user_id_str = str(user_id)
@@ -5043,7 +5038,6 @@ async def admin_panel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     if not query:
         return
-    
     await query.answer()
     user_id = query.from_user.id
     
@@ -5076,7 +5070,6 @@ async def admin_requests_handler(update: Update, context: ContextTypes.DEFAULT_T
     query = update.callback_query
     if not query:
         return
-    
     await query.answer()
     user_id = query.from_user.id
     
@@ -5102,7 +5095,6 @@ async def admin_login_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     if not query:
         return
-    
     await query.answer()
     user_id = query.from_user.id
     
@@ -5122,7 +5114,6 @@ async def admin_active_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     if not query:
         return
-    
     await query.answer()
     user_id = query.from_user.id
     
@@ -5143,7 +5134,6 @@ async def admin_selfbots_handler(update: Update, context: ContextTypes.DEFAULT_T
     query = update.callback_query
     if not query:
         return
-    
     await query.answer()
     user_id = query.from_user.id
     
@@ -5170,7 +5160,6 @@ async def admin_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     if not query:
         return
-    
     await query.answer()
     user_id = query.from_user.id
     
@@ -5191,17 +5180,15 @@ async def admin_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 📋 درخواست‌ها: {pending_requests}
 🔐 منتظر ورود: {pending_login}
 🤖 سلف‌بات فعال: {active_selfbots}
-
 🕐 آخرین به‌روزرسانی: {datetime.now().strftime('%Y/%m/%d %H:%M:%S')}
 ━━━━━━━━━━━━━━━━━━━━
-    """
+"""
     await query.edit_message_text(stats)
 
 async def approve_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query:
         return
-    
     await query.answer()
     user_id = query.from_user.id
     
@@ -5235,7 +5222,6 @@ async def reject_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query:
         return
-    
     await query.answer()
     user_id = query.from_user.id
     
@@ -5256,7 +5242,7 @@ async def reject_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await context.bot.send_message(
             chat_id=int(target_id),
-            text="⚠ درخواست عضویت شما رد شد.\n\nمی‌توانید دوباره درخواست دهید"
+            text="⚠️ درخواست عضویت شما رد شد.\n\nمی‌توانید دوباره درخواست دهید"
         )
     except:
         pass
@@ -5268,7 +5254,6 @@ async def stop_selfbot_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     if not query:
         return
-    
     await query.answer()
     user_id = query.from_user.id
     
@@ -5290,7 +5275,6 @@ async def restart_selfbot_handler(update: Update, context: ContextTypes.DEFAULT_
     query = update.callback_query
     if not query:
         return
-    
     await query.answer()
     user_id = query.from_user.id
     
@@ -5326,7 +5310,6 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     if not query:
         return
-    
     data = query.data
     user_id = query.from_user.id
     user_id_str = str(user_id)
@@ -5443,7 +5426,7 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 🔐 در مرحله ورود: {len(db.get_pending_login())}
 🤖 سلف‌بات فعال: {len(selfbot_managers)}
 ━━━━━━━━━━━━━━━━━━━━
-        """
+"""
         await msg.edit_text(stats)
     
     elif cmd.startswith('time_on'):
@@ -5708,7 +5691,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query:
         return
-    
     data = query.data
     user_id = query.from_user.id
     user_id_str = str(user_id)
@@ -5826,7 +5808,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
-    
     user = update.effective_user
     user_id = str(user.id)
     
@@ -5838,16 +5819,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_data and user_data.get('self_active'):
         text = f"""
 👋 سلام {full_name} عزیز!
-
 ✅ حساب شما فعال است.
 • /panel - پنل مدیریت
 • @{BOT_USERNAME} - پنل اینلاین
 • .پنل - پنل در همین چت
 • .اهنگ [نام آهنگ] - پخش آهنگ
-
 ⚠️ پنل فقط مخصوص شماست
-        """
-        
+"""
         keyboard = [
             [InlineKeyboardButton("📊 وضعیت عضویت", callback_data=f"membership_status_{user_id}")]
         ]
@@ -5860,21 +5838,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     text = f"""
 👋 سلام {full_name} عزیز!
-
 🌟 به ربات سلف‌بات خوش آمدید.
-
 📌 برای استفاده:
 1️⃣ روی دکمه عضویت کلیک کنید
 2️⃣ شماره تلفن خود را وارد کنید
 3️⃣ کد تأیید را وارد کنید
-
 ✅ پس از فعال شدن:
 • /panel - پنل مدیریت
 • @{BOT_USERNAME} - پنل اینلاین
 • .پنل - پنل در همین چت
 • .اهنگ [نام آهنگ] - پخش آهنگ
-    """
-    
+"""
     keyboard = [
         [InlineKeyboardButton("📝 عضویت", callback_data=f"membership_request_{user_id}")],
         [InlineKeyboardButton("📊 وضعیت عضویت", callback_data=f"membership_status_{user_id}")]
@@ -5888,7 +5862,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def panel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
-    
     user_id = update.effective_user.id
     
     user_data = db.get_user(str(user_id))
@@ -5914,7 +5887,6 @@ async def panel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def membership_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
-    
     user_id = update.effective_user.id
     user_id_str = str(user_id)
     
@@ -5936,11 +5908,10 @@ async def membership_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
-    
     user_id = update.effective_user.id
     user_id_str = str(user_id)
     text = update.message.text
-
+    
     text = convert_persian_to_english(text)
     
     # بررسی حالت broadcast
@@ -5955,9 +5926,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     if user_data.get('rejected'):
-        await update.message.reply_text("✖ درخواست شما رد شده است")
+        await update.message.reply_text("✖️ درخواست شما رد شده است")
         return
-
+    
     if user_data.get('self_active'):
         if user_id_str not in selfbot_managers:
             session_file = user_data.get('session_file')
@@ -5972,7 +5943,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("✅ سلف‌بات در حال اجراست")
         
         return
-
+    
     step = user_data.get('step')
     
     if step == 'get_phone':
@@ -6022,7 +5993,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             db.update_user(user_id_str, step='get_phone')
         except Exception as e:
             logger.error(f"خطا: {e}")
-            await update.message.reply_text(f"✖ خطا: {str(e)[:100]}\nدوباره شماره را وارد کنید")
+            await update.message.reply_text(f"✖️ خطا: {str(e)[:100]}\nدوباره شماره را وارد کنید")
             db.update_user(user_id_str, step='get_phone')
     
     elif step == 'get_code':
@@ -6098,7 +6069,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         except Exception as e:
             logger.error(f"خطا: {e}")
-            await update.message.reply_text(f"✖ کد نامعتبر است\nدوباره شماره را وارد کنید")
+            await update.message.reply_text(f"✖️ کد نامعتبر است\nدوباره شماره را وارد کنید")
             db.update_user(user_id_str, step='get_phone', phone=None, code=None, phone_code_hash=None)
     
     elif step == 'get_password':
@@ -6128,10 +6099,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             expiration_date = (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d')
             
             db.update_user(user_id_str,
-                          self_active=1,
-                          session_file=session_path,
-                          expiration_date=expiration_date,
-                          step=None)
+                           self_active=1,
+                           session_file=session_path,
+                           expiration_date=expiration_date,
+                           step=None)
             
             await update.message.reply_text(
                 f"🎉 عضویت کامل شد!\n\n"
@@ -6161,7 +6132,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         except Exception as e:
             logger.error(f"خطا: {e}")
-            await update.message.reply_text(f"✖ رمز نامعتبر است\nدوباره شماره را وارد کنید")
+            await update.message.reply_text(f"✖️ رمز نامعتبر است\nدوباره شماره را وارد کنید")
             db.update_user(user_id_str, step='get_phone', phone=None, code=None, phone_code_hash=None, password=None)
     
     else:
@@ -6170,7 +6141,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def check_session_files():
     print("\n" + "=" * 60)
     print("🔍 بررسی فایل‌های سشن...")
-    
     if not os.path.exists(SESSIONS_FOLDER):
         os.makedirs(SESSIONS_FOLDER)
         print(f"📁 پوشه سشن‌ها ایجاد شد: {SESSIONS_FOLDER}")
@@ -6195,7 +6165,6 @@ async def main():
     print(f"👑 ادمین: {ADMIN_ID}")
     print(f"📁 پوشه سشن‌ها: {SESSIONS_FOLDER}")
     print("=" * 60)
-    
     await check_session_files()
     
     request = HTTPXRequest(
@@ -6205,9 +6174,9 @@ async def main():
         write_timeout=30.0,
         pool_timeout=30.0
     )
-
+    
     app = Application.builder().token(BOT_TOKEN).request(request).build()
-
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("panel", panel_command))
     app.add_handler(CommandHandler("membership", membership_command))
@@ -6236,7 +6205,7 @@ async def main():
         session_file = user.get('session_file')
         
         if session_file and os.path.exists(session_file):
-            print(f"  • کاربر {user_id_str}...", end=" ")
+            print(f"  • کاربر {user_id_str}...", end="  ")
             
             manager = SelfBotManager(user_id_str)
             if await manager.start(session_file):
@@ -6271,7 +6240,6 @@ async def main():
 if __name__ == '__main__':
     web_thread = threading.Thread(target=run_web_server, daemon=True)
     web_thread.start()
-    
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
