@@ -307,10 +307,10 @@ def create_heart_matrix(size):
     for i in range(size):
         row = ""
         for j in range(size):
-            if (i == 0 and (j == 0 or j == size-1)) or 
-               (i == 1 and (j == 0 or j == 1 or j == size-2 or j == size-1)) or 
-               (i == 2 and (j == 0 or j == 1 or j == 2 or j == size-3 or j == size-2 or j == size-1)) or 
-               (i >= 3 and i < size-1 and (j >= i-2 and j <= size-(i-2)-1)) or 
+            if (i == 0 and (j == 0 or j == size-1)) or \
+               (i == 1 and (j == 0 or j == 1 or j == size-2 or j == size-1)) or \
+               (i == 2 and (j == 0 or j == 1 or j == 2 or j == size-3 or j == size-2 or j == size-1)) or \
+               (i >= 3 and i < size-1 and (j >= i-2 and j <= size-(i-2)-1)) or \
                (i == size-1 and (j >= size//2 - 1 and j <= size//2 + 1)):
                 row += R
             else:
