@@ -1,3 +1,4 @@
+
 import os
 import sqlite3
 import logging
@@ -3644,9 +3645,9 @@ async def pin_message(self, chat_id, message_id):
             await self.handle_exit_search_command(event)
             return
         
-        # ========== اگر هیچ دستوری شناسایی نشد ==========
-        # هیچ کاری نکن (خطا نده)
-        return
+        # دستورات ناشناخته
+        if command_text:
+            await event.edit(f"❌ دستور {command_text} شناسایی نشد")
     
     # ========== توابع کمکی برای دستورات ==========
     
