@@ -2830,115 +2830,131 @@ class SelfBotManager:
         """
     
     # ========== توابع کمکی جدید ==========
-    
-    async def get_chat_stats(self, chat_id, target_user_id=None):
-        """دریافت آمار چت برای کاربر خاص"""
-        try:
-            stats = {
-                'my_messages': 0,
-                'target_messages': 0,
-                'my_photos': 0,
-                'target_photos': 0,
-                'my_videos': 0,
-                'target_videos': 0,
-                'my_stickers': 0,
-                'target_stickers': 0,
-                'my_gifs': 0,
-                'target_gifs': 0,
-                'my_voices': 0,
-                'target_voices': 0,
-                'my_files': 0,
-                'target_files': 0
-            }
-            
-            target_user = target_user_id or chat_id
-            
-            # دریافت تاریخچه پیام‌ها
-            limit = 5000
-            async for message in self.client.iter_messages(chat_id, limit=limit):
-                if message.sender_id == self.my_id:
-                    stats['my_messages'] += 1
-                    if message.photo:
-                        stats['my_photos'] += 1
-                    elif message.video:
-                        stats['my_videos'] += 1
-                    elif message.sticker:
-                        stats['my_stickers'] += 1
-                    elif message.gif:
-                        stats['my_gifs'] += 1
-                    elif message.voice:
-                        stats['my_voices'] += 1
-                    elif message.document:
-                        stats['my_files'] += 1
-                elif message.sender_id == target_user:
-                    stats['target_messages'] += 1
-                    if message.photo:
-                        stats['target_photos'] += 1
-                    elif message.video:
-                        stats['target_videos'] += 1
-                    elif message.sticker:
-                        stats['target_stickers'] += 1
-                    elif message.gif:
-                        stats['target_gifs'] += 1
-                    elif message.voice:
-                        stats['target_voices'] += 1
-                    elif message.document:
-                        stats['target_files'] += 1
-            
-            return stats
-        except Exception as e:
-            logger.error(f"خطا در دریافت آمار چت: {e}")
+
+async def get_chat_stats(self, chat_id, target_user_id=None):
+    """دریافت آمار چت برای کاربر خاص"""
+    try:
+        stats = {
+            'my_messages': 0,
+            'target_messages': 0,
+            'my_photos': 0,
+            'target_photos': 0,
+            'my_videos': 0,
+            'target_videos': 0,
+            'my_stickers': 0,
+            'target_stickers': 0,
+            'my_gifs': 0,
+            'target_gifs': 0,
+            'my_voices': 0,
+            'target_voices': 0,
+            'my_files': 0,
+            'target_files': 0
+        }
+        
+        if not target_user_id:
+            logger.error("target_user_id is None")
             return None
-    
-    async def generate_qr_code(self, text_or_photo, is_photo=False):
-        """تولید کد QR از متن یا عکس"""
-        try:
-            if is_photo:
-                # دانلود عکس و تبدیل به متن (OCR ساده)
-                photo_path = await self.client.download_media(text_or_photo)
-                if photo_path and os.path.exists(photo_path):
-                    # در اینجا می‌توانید از OCR استفاده کنید
-                    # برای سادگی، از نام فایل استفاده می‌کنیم
-                    text = f"Image: {os.path.basename(photo_path)}"
-                    os.remove(photo_path)
-                else:
-                    return None, "خطا در دانلود عکس"
+        
+        target_user_id = int(target_user_id)
+        
+        limit = 5000
+        async for message in self.client.iter_messages(chat_id, limit=limit):
+            sender_id = message.sender_id
+            if not sender_id:
+                if hasattr(message, 'from_id') and message.from_id:
+                    if hasattr(message.from_id, 'user_id'):
+                        sender_id = message.from_id.user_id
+                    elif hasattr(message.from_id, 'channel_id'):
+                        sender_id = message.from_id.channel_id
+                    elif hasattr(message.from_id, 'chat_id'):
+                        sender_id = message.from_id.chat_id
+            
+            if not sender_id:
+                continue
+            
+            sender_id = int(sender_id)
+            
+            if sender_id == self.my_id:
+                stats['my_messages'] += 1
+                if message.photo:
+                    stats['my_photos'] += 1
+                elif message.video:
+                    stats['my_videos'] += 1
+                elif message.sticker:
+                    stats['my_stickers'] += 1
+                elif message.gif:
+                    stats['my_gifs'] += 1
+                elif message.voice:
+                    stats['my_voices'] += 1
+                elif message.document:
+                    stats['my_files'] += 1
+            
+            elif sender_id == target_user_id:
+                stats['target_messages'] += 1
+                if message.photo:
+                    stats['target_photos'] += 1
+                elif message.video:
+                    stats['target_videos'] += 1
+                elif message.sticker:
+                    stats['target_stickers'] += 1
+                elif message.gif:
+                    stats['target_gifs'] += 1
+                elif message.voice:
+                    stats['target_voices'] += 1
+                elif message.document:
+                    stats['target_files'] += 1
+        
+        return stats
+    except Exception as e:
+        logger.error(f"خطا در دریافت آمار چت: {e}")
+        return None
+
+async def generate_qr_code(self, text_or_photo, is_photo=False):
+    """تولید کد QR از متن یا عکس"""
+    try:
+        if is_photo:
+            photo_path = await self.client.download_media(text_or_photo)
+            if photo_path and os.path.exists(photo_path):
+                text = f"Image: {os.path.basename(photo_path)}"
+                os.remove(photo_path)
             else:
-                text = text_or_photo
-            
-            if not text:
-                return None, "متن خالی است"
-            
-            qr = qrcode.make(text)
-            qr_path = f"qr_{self.user_id}_{int(time.time())}.png"
-            qr.save(qr_path)
-            
-            return qr_path, text
-        except Exception as e:
-            return None, str(e)
-    
-    async def get_admins(self, chat_id):
-        """دریافت لیست ادمین‌های گروه"""
-        try:
-            admins = []
-            async for user in self.client.iter_participants(
-                chat_id, 
-                filter=ChannelParticipantsAdmins
-            ):
-                admins.append(user)
-            return admins
-        except Exception as e:
-            logger.error(f"خطا در دریافت ادمین‌ها: {e}")
-            return []
-    
-    async def pin_message(self, chat_id, message_id):
-        """پین کردن پیام"""
-        try:
-            await self.client.pin_message(chat_id, message_id)
-            return True
-        except Exception as e:
-            logger.error(f"خطا در پین کردن پیام: {e}")
-            return False
+                return None, "خطا در دانلود عکس"
+        else:
+            text = text_or_photo
+        
+        if not text:
+            return None, "متن خالی است"
+        
+        qr = qrcode.make(text)
+        qr_path = f"qr_{self.user_id}_{int(time.time())}.png"
+        qr.save(qr_path)
+        
+        return qr_path, text
+    except Exception as e:
+        return None, str(e)
+
+async def get_admins(self, chat_id):
+    """دریافت لیست ادمین‌های گروه"""
+    try:
+        admins = []
+        async for user in self.client.iter_participants(
+            chat_id, 
+            filter=ChannelParticipantsAdmins
+        ):
+            admins.append(user)
+        return admins
+    except Exception as e:
+        logger.error(f"خطا در دریافت ادمین‌ها: {e}")
+        return []
+
+async def pin_message(self, chat_id, message_id):
+    """پین کردن پیام"""
+    try:
+        await self.client.pin_message(chat_id, message_id)
+        return True
+    except Exception as e:
+        logger.error(f"خطا در پین کردن پیام: {e}")
+        return False
     
     # ========== ادامه هندلرهای دستورات ==========
     
@@ -3279,17 +3295,51 @@ class SelfBotManager:
                 await event.edit("⚠️ هیچ پیامی یافت نشد")
             return
         
+        # حذف کامل
         if command_text == 'حذف کامل':
-            # حذف پیام‌های خود در چت فعلی
-            messages = []
-            async for msg in self.client.iter_messages(event.chat_id, limit=None):
-                if msg.sender_id == self.my_id:
-                    messages.append(msg.id)
-            if messages:
-                await self.client.delete_messages(event.chat_id, messages)
-                await event.edit(f"✅ {len(messages)} پیام حذف شدند")
-            else:
-                await event.edit("⚠️ هیچ پیامی یافت نشد")
+            await event.edit("⏳ در حال حذف پیام‌ها...")
+            
+            deleted_count = 0
+            error_count = 0
+            batch = []
+            
+            try:
+                async for msg in self.client.iter_messages(event.chat_id, limit=None, from_user='me'):
+                    batch.append(msg.id)
+                    
+                    if len(batch) >= 50:
+                        try:
+                            await self.client.delete_messages(event.chat_id, batch)
+                            deleted_count += len(batch)
+                            batch = []
+                            await asyncio.sleep(0.5)
+                        except FloodWaitError as e:
+                            await asyncio.sleep(e.seconds + 1)
+                            try:
+                                await self.client.delete_messages(event.chat_id, batch)
+                                deleted_count += len(batch)
+                                batch = []
+                            except:
+                                error_count += len(batch)
+                                batch = []
+                        except Exception as e:
+                            error_count += len(batch)
+                            batch = []
+                
+                if batch:
+                    try:
+                        await self.client.delete_messages(event.chat_id, batch)
+                        deleted_count += len(batch)
+                    except:
+                        error_count += len(batch)
+                
+                if deleted_count > 0:
+                    await event.edit(f"✅ {deleted_count} پیام حذف شدند" + (f"\n❌ {error_count} پیام حذف نشدند" if error_count > 0 else ""))
+                else:
+                    await event.edit("⚠️ هیچ پیامی یافت نشد")
+                    
+            except Exception as e:
+                await event.edit(f"⚠️ خطا: {str(e)[:100]}")
             return
         
         if command_text == 'پینگ':
@@ -3594,9 +3644,9 @@ class SelfBotManager:
             await self.handle_exit_search_command(event)
             return
         
-        # دستورات ناشناخته
-        if command_text:
-            await event.edit(f"❌ دستور {command_text} شناسایی نشد")
+        # ========== اگر هیچ دستوری شناسایی نشد ==========
+        # هیچ کاری نکن (خطا نده)
+        return
     
     # ========== توابع کمکی برای دستورات ==========
     
@@ -5537,35 +5587,48 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         text=f"⏳ در حال اجرا..."
     )
     
-    # ========== دستورات جدید ==========
+            # ========== دستورات جدید ==========
     
     if cmd == 'stats':
         # امار گپ
         await msg.edit_text("📊 در حال دریافت آمار گفتگو...")
         
         target_user_id = None
+        
+        # ✅ اگر ریپلای داشت، از ریپلای استفاده کن
         if query.message.reply_to_message:
             target_user_id = query.message.reply_to_message.from_user.id
+            # اگر from_user.id وجود نداشت، از sender_id استفاده کن
+            if not target_user_id:
+                target_user_id = query.message.reply_to_message.sender_id
         
+        # ✅ اگر در پی‌وی بود، از خود کاربر استفاده کن
         if not target_user_id and query.message.chat.type == 'private':
             target_user_id = query.message.chat.id
         
+        # ✅ اگر هنوز target_user_id نداریم، خطا بده
         if not target_user_id:
             await msg.edit_text("⚠️ لطفاً روی پیام کاربر ریپلای کنید یا در پی‌وی از این دستور استفاده کنید")
             return
         
+        # ✅ تبدیل به int
+        target_user_id = int(target_user_id)
+        
+        # ✅ دریافت آمار
         stats = await manager.get_chat_stats(query.message.chat_id, target_user_id)
         if not stats:
             await msg.edit_text("⚠️ خطا در دریافت آمار")
             return
         
         try:
+            # ✅ دریافت نام کاربران
             target_name = await manager.get_user_info(target_user_id)
             my_name = await manager.get_user_info(manager.my_id)
             
             total_my = stats['my_messages']
             total_target = stats['target_messages']
             
+            # تعیین برنده
             if total_my > total_target:
                 winner = my_name
             elif total_target > total_my:
@@ -5573,6 +5636,7 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             else:
                 winner = "مساوی"
             
+            # نسبت پیام‌ها
             if total_target > 0:
                 ratio = f"{total_my} به {total_target}"
             else:
@@ -5581,7 +5645,7 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             stats_text = f"""
 📊 آمار گفتگو
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-نوع                {my_name[:10]}        {target_name[:10]}
+نوع                {my_name[:15]}        {target_name[:15]}
 ────────────────────────────────────
 💬 پیام            {total_my:>5}        {total_target:>5}
 📸 عکس             {stats['my_photos']:>5}        {stats['target_photos']:>5}
@@ -5596,6 +5660,7 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             """
             
+            # ✅ ارسال آمار
             await manager.client.send_message(query.message.chat_id, stats_text)
             await msg.delete()
             
@@ -5950,21 +6015,26 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await msg.edit_text("🗑️ حذف فیلتر [کلمه]")
         return
     
-    # حفاظت اسپم
-    if cmd == 'spam_protection_on':
+    # ========== دستورات اسپم ==========
+    
+    # اسپم روشن
+    if cmd == 'spam_on':
         db.set_spam_settings(user_id, spam_protection=1)
         await msg.edit_text("✅ حفاظت اسپم فعال شد")
         return
     
-    if cmd == 'spam_protection_off':
+    # اسپم خاموش
+    if cmd == 'spam_off':
         db.set_spam_settings(user_id, spam_protection=0)
         await msg.edit_text("✅ حفاظت اسپم غیرفعال شد")
         return
     
-    if cmd == 'spam_settings':
+    # تنظیم اسپم
+    if cmd == 'spam_set':
         await msg.edit_text("⚙️ تنظیم اسپم [تعداد] [زمان]\nمثال: تنظیم اسپم 5 10")
         return
     
+    # وضعیت اسپم
     if cmd == 'spam_status':
         settings = db.get_spam_settings(user_id)
         status_text = f"""
@@ -5974,6 +6044,22 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 ⏱️ زمان: {settings.get('mute_duration', 10)} ثانیه
 """
         await msg.edit_text(status_text)
+        return
+    
+    # ========== دستورات اتوسین ==========
+    
+    # فعال کردن اتوسین
+    if cmd == 'autosend_on':
+        db.update_selfbot_setting(user_id, 'autosend_mode', 1)
+        manager.autosend_enabled = True
+        await msg.edit_text("✅ اتوسین فعال شد")
+        return
+    
+    # غیرفعال کردن اتوسین
+    if cmd == 'autosend_off':
+        db.update_selfbot_setting(user_id, 'autosend_mode', 0)
+        manager.autosend_enabled = False
+        await msg.edit_text("✅ اتوسین غیرفعال شد")
         return
     
     # قفل رسانه
