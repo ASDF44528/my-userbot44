@@ -20,45 +20,54 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InlineQ
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, InlineQueryHandler
 from telegram.request import HTTPXRequest
 from telethon import TelegramClient, events, types
-from telethon.tl.types import PeerUser, PeerChannel, PeerChat, MessageMediaPhoto, MessageMediaDocument, ReactionEmoji, MessageEntityBold, MessageEntityUnderline, MessageEntityStrike, MessageEntityBlockquote, MessageEntitySpoiler, MessageEntityItalic, MessageEntityCode, MessageEntityPre
-from telethon.tl.functions.messages import SendReactionRequest, DeleteMessagesRequest, SetTypingRequest, ReadHistoryRequest
-from telethon.tl.functions.account import UpdateProfileRequest
+from telethon.tl.types import PeerUser, PeerChannel, PeerChat, MessageMediaPhoto, MessageMediaDocument, ReactionEmoji, MessageEntityBold, MessageEntityUnderline, MessageEntityStrike, MessageEntityBlockquote, MessageEntitySpoiler, MessageEntityItalic, MessageEntityCode, MessageEntityPre, InputPeerChat, InputPeerChannel, InputPeerUser, KeyboardButtonSwitchInline
+from telethon.tl.functions.messages import SendReactionRequest, DeleteMessagesRequest, SetTypingRequest
+from telethon.tl.functions.account import UpdateProfileRequest, UpdateStatusRequest
 from telethon.tl.functions.photos import UploadProfilePhotoRequest, DeletePhotosRequest, GetUserPhotosRequest
 from telethon.tl.functions.contacts import BlockRequest
 from telethon.tl.functions.users import GetFullUserRequest
-from telethon.errors import FloodWaitError, SessionPasswordNeededError
+from telethon.errors import MessageDeleteForbiddenError, FloodWaitError, SessionPasswordNeededError, FloodWaitError as TelethonFloodWaitError
+from telethon.tl.functions.messages import GetHistoryRequest
 from telethon.tl.functions.channels import GetParticipantsRequest
 from telethon.tl.types import ChannelParticipantsAdmins
-from deep_translator import GoogleTranslator
 
-# ========== وب سرور ==========
+# ========== تنظیمات وب سرور برای Render (پورت 10000) ==========
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
 def home():
-    return jsonify({"status": "running", "bot": "SelfBot", "version": "4.6.0"})
+    return jsonify({
+        "status": "running",
+        "bot": "Gap_5_bot",
+        "version": "4.6.0"
+    })
 
 @flask_app.route('/health')
 def health():
     return jsonify({"status": "healthy"}), 200
+
+@flask_app.route('/ping')
+def ping():
+    return jsonify({"status": "alive", "message": "Bot is awake"}), 200
 
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
     logger.info(f"🚀 وب سرور روی پورت {port} در حال اجراست")
     flask_app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
-# ========== تنظیمات اولیه ==========
+# ========== تنظیم زمان ایران برای کل سیستم ==========
 os.environ['TZ'] = 'Asia/Tehran'
 try:
     time.tzset()
 except:
     pass
 
-# ========== تنظیمات API ==========
+# ========== تنظیمات گوگل سرچ ==========
 GOOGLE_SEARCH_API_KEY = "AIzaSyCMYOU0NpU5xfu7GrffyywVUugd1yD2uDU"
 GOOGLE_CSE_ID = "3185e48756dfd482f"
 GOOGLE_SEARCH_URL = "https://www.googleapis.com/customsearch/v1"
 
+# ========== تنظیمات هوش مصنوعی ==========
 GEMINI_KEY = "AIzaSyBhlSytH4Zfe-ww1D8HsrgJfCf5TRY1SLc"
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 PAXSENIX_API_KEY = "sk-paxsenix-Xo_BAFNGgWVZ_ymWd02Rk1JHbyoDSEzfPhiolJ3F12cY6XZG"
@@ -69,27 +78,6 @@ DEEPSEEK_FREE_URL = "https://deepseek.api-sina-free.workers.dev/?text="
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# ========== اطلاعات بات ==========
-BOT_TOKEN = "8304449635:AAHTqMEke8e1z1ZeMdgkFJGD9gV8EWtmfVk"
-ADMIN_ID = 6443963679
-BOT_USERNAME = "Gap_5_bot"
-MUSIC_BOT = "Gap_4_bot"
-
-# ========== پوشه‌ها ==========
-SESSIONS_FOLDER = 'user_sessions'
-MEDIA_FOLDER = 'media_storage'
-REPORT_MEDIA_FOLDER = 'reported_media'
-
-for folder in [SESSIONS_FOLDER, MEDIA_FOLDER, REPORT_MEDIA_FOLDER]:
-    if not os.path.exists(folder):
-        os.makedirs(folder)
-
-# ========== تنظیمات ==========
-GROUP_ID = -1002817019483
-REPORT_CONFIG_FILE = "report_config.json"
-BOT_VERSION = "4.6.0"
-BOT_CREATOR = "Self-Bot AI Assistant"
-
 # ========== لیست API های ثابت ==========
 API_CONFIGS = [
     {"api_id": 22409632, "api_hash": "b74c1ee200ad9ced6315859e9bd4125a"},
@@ -99,6 +87,55 @@ API_CONFIGS = [
     {"api_id": 12832882, "api_hash": "1953c708cb3c47ecba74dc618b209e22"},
     {"api_id": 26645489, "api_hash": "6a212d0a400c97264600b3f932de5c2f"},
 ]
+
+def get_user_api(user_id):
+    conn = sqlite3.connect('main_database.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT api_id, api_hash FROM users WHERE user_id = ?', (user_id,))
+    row = cursor.fetchone()
+    
+    if row and row[0] is not None and row[1] is not None:
+        conn.close()
+        return {"api_id": row[0], "api_hash": row[1]}
+    
+    api_count = {}
+    for api in API_CONFIGS:
+        cursor.execute('SELECT COUNT(*) FROM users WHERE api_id = ?', (api["api_id"],))
+        api_count[api["api_id"]] = cursor.fetchone()[0]
+    
+    best_api = min(API_CONFIGS, key=lambda x: api_count.get(x["api_id"], 0))
+    
+    cursor.execute('UPDATE users SET api_id = ?, api_hash = ? WHERE user_id = ?', 
+                   (best_api["api_id"], best_api["api_hash"], user_id))
+    conn.commit()
+    conn.close()
+    
+    logger.info(f"API اختصاص یافته به کاربر {user_id}: {best_api['api_id']}")
+    return best_api
+
+BOT_TOKEN = "8304449635:AAHTqMEke8e1z1ZeMdgkFJGD9gV8EWtmfVk"
+ADMIN_ID = 6443963679
+BOT_USERNAME = "Gap_5_bot"
+MUSIC_BOT = "Gap_4_bot"
+
+# ========== پوشه سشن‌ها ==========
+SESSIONS_FOLDER = 'user_sessions'
+if not os.path.exists(SESSIONS_FOLDER):
+    os.makedirs(SESSIONS_FOLDER)
+
+# ========== تنظیمات سلف‌بات ==========
+GROUP_ID = -1002817019483
+
+# ========== فایل‌های تنظیمات ==========
+MEDIA_FOLDER = 'media_storage'
+if not os.path.exists(MEDIA_FOLDER):
+    os.makedirs(MEDIA_FOLDER)
+
+REPORT_CONFIG_FILE = "report_config.json"
+REPORT_MEDIA_FOLDER = 'reported_media'
+if not os.path.exists(REPORT_MEDIA_FOLDER):
+    os.makedirs(REPORT_MEDIA_FOLDER)
 
 # ========== لیست ایموجی‌های مجاز ==========
 ALLOWED_EMOJIS = [
@@ -217,11 +254,35 @@ SPAM_MESSAGES = [
     "کسمادرت","کیر شتر تو ناموست","نودا ننت فروشی","خایه با پرزش تو ننت","چشای ننت تو کون خارت بره","ننتو ریدم","لال شو مادرجنده اوبنه ای","اوب از کون ننت میباره","ماهی تو کسمادرت","کیر هرچی خره تو کسمادرت","کیر رونالدو به کس خار و مادرت","مادرت زیر کیرم شهید شد","اسپنک زدم به کون مادر جندت","کیرم یهویی به مردع و زندت","کیر به فیس ننت","برو مادرجنده بی غیرت","استخون های مرده هات تو کسمادرت","اسپرمم تو نوامیست","مادرتو با پوزیشن های مختلف گاییدم","میز و صندلی تو کسمادرت","کیر به ناموس دلقکت","دمپایی تو کون ننت","دماغ پینوکیو رو گذاشتم جلو کص مادرت و بهش گفتم که بگه مادرت جنده نیست تا با دراز شدن دماغش کص مادرت پاره بشه","مادر فلش شده جوری با کیر میزنم ب فرق سر ننت ک حافظش بپره","كيرم شيك تو كس ننت","مادرتو کردم تو بشکه نفت از بالا کوه قل دادم پایین","با کیرم مادرتو هیپنوتیزم کردم","ناموستو تو کوچه موقع عید دیدنی دیدم رفتم خونه به یادش جق زدم","با خیسی عرق کون مادرت جقیدم","با سرعت نور تو فضا حرکت میکنم تا پیر نشم و بزارم آبجی کوچیکت بزرگ بشه تا وقتی بزرگ شد باهاش سکس کنم","مادرتو پودر میکنم ازش سنگ توالت میسازم هر روز صبح رو مادرت میرینم","مادرتو مجبور میکنم خودکشی کوانتومی کنه تا در بی نهایت جهان موازی یتیم بشی","دیدی چه لگدی به مادرت زدم ؟","فرشی که مادرت روش کونشو گذاشته بو کردم","مادرتو جوری گاییدم که همسایه ها فکر کردن اسب ترکمن اومده خونتون"
 ]
 
-# ========== متغیرهای سراسری ==========
+# ========== تنظیمات پیش‌فرض قفل رسانه ==========
+DEFAULT_LOCK_SETTINGS = {
+    'link': False,
+    'photo': False,
+    'video': False,
+    'sticker': False,
+    'gif': False,
+    'voice': False,
+    'file': False,
+    'music': False,
+    'video_note': False,
+    'contact': False,
+    'location': False,
+    'emoji': False,
+    'text': False
+}
+
+# ========== اطلاعات بات ==========
+BOT_VERSION = "4.6.0"
+BOT_CREATOR = "Self-Bot AI Assistant"
+
+# ========== لیست‌های انیمیشن ==========
+HEARTS = ["❤️", "🧡", "💛", "💚", "💙", "💜", "🤍"]
+MOONS = ["🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘", "🌑"]
+
+# ========== متغیرهای گزارش‌گیری ==========
 media_cache = {}
 message_cache = {}
 user_inline_messages = {}
-selfbot_managers = {}
 
 # ========== لیست اکشن‌ها ==========
 action_types = {
@@ -239,7 +300,7 @@ action_types = {
     'لغو': types.SendMessageCancelAction(),
 }
 
-# ========== متغیرهای انیمیشن قلب ==========
+# ========== متغیرهای انیمیشن قلب پیشرفته ==========
 R = "❤️"
 W = "🤍"
 SLEEP = 0.1
@@ -260,36 +321,1027 @@ def create_heart_matrix(size):
         heart.append(row)
     return "\n".join(heart)
 
+HEART_MATRIX_SIZES = [3, 5, 7, 9, 11, 13]
 JOINED_HEART = create_heart_matrix(7)
 HEARTLET_LEN = JOINED_HEART.count(R)
 
-# ========== توابع کمکی ==========
+# ========== کلاس مدیریت تنظیمات گزارش ==========
+class ReportConfig:
+    def __init__(self, user_id, config_file=REPORT_CONFIG_FILE):
+        self.user_id = user_id
+        self.config_file = config_file
+        self.report_group_id = GROUP_ID
+        self.auto_save_media = True
+        self.report_deleted_media = True
+        self.report_edited_messages = True
+        self.report_ttl_media = True
+        self.load_config()
+    
+    def load_config(self):
+        try:
+            if os.path.exists(self.config_file):
+                with open(self.config_file, 'r') as f:
+                    data = json.load(f)
+                    user_settings = data.get(str(self.user_id), {})
+                    self.report_group_id = user_settings.get('report_group_id', GROUP_ID)
+                    self.auto_save_media = user_settings.get('auto_save_media', True)
+                    self.report_deleted_media = user_settings.get('report_deleted_media', True)
+                    self.report_edited_messages = user_settings.get('report_edited_messages', True)
+                    self.report_ttl_media = user_settings.get('report_ttl_media', True)
+                logger.info(f"تنظیمات گزارش برای کاربر {self.user_id} لود شد")
+            else:
+                self.save_config()
+        except Exception as e:
+            logger.error(f"خطا در بارگذاری تنظیمات: {e}")
+    
+    def save_config(self):
+        try:
+            data = {}
+            if os.path.exists(self.config_file):
+                with open(self.config_file, 'r') as f:
+                    data = json.load(f)
+            
+            data[str(self.user_id)] = {
+                'report_group_id': self.report_group_id,
+                'auto_save_media': self.auto_save_media,
+                'report_deleted_media': self.report_deleted_media,
+                'report_edited_messages': self.report_edited_messages,
+                'report_ttl_media': self.report_ttl_media
+            }
+            
+            with open(self.config_file, 'w') as f:
+                json.dump(data, f, ensure_ascii=False, indent=4)
+            
+            logger.info(f"تنظیمات گزارش برای کاربر {self.user_id} ذخیره شد")
+        except Exception as e:
+            logger.error(f"خطا در ذخیره تنظیمات: {e}")
+    
+    def set_report_group(self, group_id):
+        self.report_group_id = group_id
+        self.save_config()
+        return f"✅ گروه گزارش به {group_id} تغییر کرد"
+    
+    def toggle_auto_save(self):
+        self.auto_save_media = not self.auto_save_media
+        self.save_config()
+        status = "فعال" if self.auto_save_media else "غیرفعال"
+        return f"✅ ذخیره خودکار رسانه‌ها {status} شد"
 
-def get_user_api(user_id):
-    conn = sqlite3.connect('main_database.db')
-    cursor = conn.cursor()
+# ========== دیتابیس اصلی ==========
+class MainDatabase:
+    def __init__(self, db_name='main_database.db'):
+        self.db_name = db_name
+        self.init_database()
     
-    cursor.execute('SELECT api_id, api_hash FROM users WHERE user_id = ?', (user_id,))
-    row = cursor.fetchone()
-    
-    if row and row[0] is not None and row[1] is not None:
+    def init_database(self):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS media_locks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER,
+                target_id INTEGER,
+                lock_link BOOLEAN DEFAULT 0,
+                lock_photo BOOLEAN DEFAULT 0,
+                lock_video BOOLEAN DEFAULT 0,
+                lock_sticker BOOLEAN DEFAULT 0,
+                lock_gif BOOLEAN DEFAULT 0,
+                lock_voice BOOLEAN DEFAULT 0,
+                lock_file BOOLEAN DEFAULT 0,
+                lock_music BOOLEAN DEFAULT 0,
+                lock_video_note BOOLEAN DEFAULT 0,
+                lock_contact BOOLEAN DEFAULT 0,
+                lock_location BOOLEAN DEFAULT 0,
+                lock_emoji BOOLEAN DEFAULT 0,
+                lock_text BOOLEAN DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(owner_id, target_id)
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                user_id TEXT PRIMARY KEY,
+                full_name TEXT,
+                username TEXT,
+                phone TEXT,
+                self_active BOOLEAN DEFAULT 0,
+                admin_approved BOOLEAN DEFAULT 0,
+                rejected BOOLEAN DEFAULT 0,
+                request_sent BOOLEAN DEFAULT 0,
+                step TEXT,
+                phone_code_hash TEXT,
+                code TEXT,
+                password TEXT,
+                request_date TEXT,
+                activation_date TEXT,
+                expiration_date TEXT,
+                session_file TEXT,
+                api_id INTEGER,
+                api_hash TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS broadcasts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                admin_id INTEGER,
+                message_text TEXT,
+                message_type TEXT DEFAULT 'text',
+                media_file TEXT,
+                sent_count INTEGER DEFAULT 0,
+                failed_count INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_memory (
+                user_id INTEGER PRIMARY KEY,
+                username TEXT,
+                first_name TEXT,
+                last_name TEXT,
+                known_name TEXT,
+                chat_id INTEGER,
+                last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                message TEXT,
+                is_from_user BOOLEAN,
+                ai_type INTEGER,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES user_memory (user_id)
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_info (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                key TEXT,
+                value TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES user_memory (user_id)
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS selfbot_settings (
+                user_id INTEGER PRIMARY KEY,
+                time_enabled BOOLEAN DEFAULT 0,
+                flag_enabled BOOLEAN DEFAULT 0,
+                pv_lock_all BOOLEAN DEFAULT 0,
+                autosend_mode BOOLEAN DEFAULT 0,
+                text_style TEXT,
+                report_group_id INTEGER DEFAULT -1002817019483,
+                ai_1_pm BOOLEAN DEFAULT 0,
+                ai_2_pm BOOLEAN DEFAULT 0,
+                ai_3_pm BOOLEAN DEFAULT 0,
+                ai_1_group BOOLEAN DEFAULT 0,
+                ai_2_group BOOLEAN DEFAULT 0,
+                ai_3_group BOOLEAN DEFAULT 0,
+                translate_english BOOLEAN DEFAULT 0,
+                translate_arabic BOOLEAN DEFAULT 0,
+                translate_hebrew BOOLEAN DEFAULT 0,
+                translate_russian BOOLEAN DEFAULT 0,
+                translate_turkish BOOLEAN DEFAULT 0,
+                panel_mode BOOLEAN DEFAULT 1,
+                time_font_indices TEXT,
+                filter_enabled BOOLEAN DEFAULT 0,
+                selfbot_enabled BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS enemies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER,
+                enemy_id INTEGER,
+                chat_type TEXT DEFAULT 'pv',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(owner_id, enemy_id, chat_type)
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS locked_pvs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER,
+                locked_user_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(owner_id, locked_user_id)
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS reactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER,
+                chat_id INTEGER,
+                target_id INTEGER,
+                emoji TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(owner_id, chat_id, target_id)
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS auto_comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER,
+                channel_id INTEGER,
+                comment_text TEXT,
+                channel_title TEXT,
+                channel_type TEXT,
+                channel_username TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(owner_id, channel_id)
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sent_comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER,
+                channel_id INTEGER,
+                message_id INTEGER,
+                comment_sent BOOLEAN DEFAULT 0,
+                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(owner_id, channel_id, message_id)
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS message_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER,
+                chat_id INTEGER,
+                message_id INTEGER,
+                message_text TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(owner_id, chat_id, message_id)
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS enemy_spam_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER,
+                spam_text TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS filter_words (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER,
+                word TEXT,
+                enabled BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(owner_id, word)
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS spam_settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER,
+                spam_protection BOOLEAN DEFAULT 0,
+                spam_limit INTEGER DEFAULT 10,
+                mute_duration INTEGER DEFAULT 10,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(owner_id)
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_locks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER,
+                target_id INTEGER,
+                lock_type TEXT,
+                enabled BOOLEAN DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(owner_id, target_id, lock_type)
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS pinned_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER,
+                chat_id INTEGER,
+                message_id INTEGER,
+                pinned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(owner_id, chat_id, message_id)
+            )
+        ''')
+        
+        conn.commit()
         conn.close()
-        return {"api_id": row[0], "api_hash": row[1]}
+        logger.info("✓ دیتابیس اصلی ایجاد شد")
     
-    api_count = {}
-    for api in API_CONFIGS:
-        cursor.execute('SELECT COUNT(*) FROM users WHERE api_id = ?', (api["api_id"],))
-        api_count[api["api_id"]] = cursor.fetchone()[0]
+    def add_user(self, user_id, full_name, username):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT OR REPLACE INTO users (user_id, full_name, username, updated_at) 
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (user_id, full_name, username))
+        conn.commit()
+        conn.close()
     
-    best_api = min(API_CONFIGS, key=lambda x: api_count.get(x["api_id"], 0))
+    def get_user(self, user_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
+        columns = [description[0] for description in cursor.description]
+        row = cursor.fetchone()
+        conn.close()
+        return dict(zip(columns, row)) if row else None
     
-    cursor.execute('UPDATE users SET api_id = ?, api_hash = ? WHERE user_id = ?', 
-                   (best_api["api_id"], best_api["api_hash"], user_id))
-    conn.commit()
-    conn.close()
+    def update_user(self, user_id, **kwargs):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        set_clause = ', '.join([f"{key} = ?" for key in kwargs.keys()])
+        values = list(kwargs.values())
+        values.append(user_id)
+        cursor.execute(f'UPDATE users SET {set_clause}, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?', values)
+        conn.commit()
+        conn.close()
     
-    logger.info(f"API اختصاص یافته به کاربر {user_id}: {best_api['api_id']}")
-    return best_api
+    def get_pending_requests(self):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM users 
+            WHERE request_sent = 1 AND admin_approved = 0 AND rejected = 0 AND step IS NULL
+            ORDER BY request_date DESC
+        ''')
+        columns = [description[0] for description in cursor.description]
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(zip(columns, row)) for row in rows]
+    
+    def get_pending_login(self):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM users 
+            WHERE admin_approved = 1 AND self_active = 0 AND step IS NOT NULL
+            ORDER BY activation_date DESC
+        ''')
+        columns = [description[0] for description in cursor.description]
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(zip(columns, row)) for row in rows]
+    
+    def get_active_users(self):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM users 
+            WHERE self_active = 1 AND admin_approved = 1
+            ORDER BY activation_date DESC
+        ''')
+        columns = [description[0] for description in cursor.description]
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(zip(columns, row)) for row in rows]
+    
+    def get_all_users(self):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT user_id, full_name, username, phone, self_active, created_at 
+            FROM users ORDER BY created_at DESC
+        ''')
+        columns = [description[0] for description in cursor.description]
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(zip(columns, row)) for row in rows]
+    
+    def get_selfbot_settings(self, user_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM selfbot_settings WHERE user_id = ?', (user_id,))
+        columns = [description[0] for description in cursor.description]
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            settings = dict(zip(columns, row))
+            settings['ai_status'] = {
+                'ai_1_pm': bool(settings.get('ai_1_pm', 0)),
+                'ai_2_pm': bool(settings.get('ai_2_pm', 0)),
+                'ai_3_pm': bool(settings.get('ai_3_pm', 0)),
+                'ai_1_group': bool(settings.get('ai_1_group', 0)),
+                'ai_2_group': bool(settings.get('ai_2_group', 0)),
+                'ai_3_group': bool(settings.get('ai_3_group', 0))
+            }
+            settings['translate'] = {
+                'english': bool(settings.get('translate_english', 0)),
+                'arabic': bool(settings.get('translate_arabic', 0)),
+                'hebrew': bool(settings.get('translate_hebrew', 0)),
+                'russian': bool(settings.get('translate_russian', 0)),
+                'turkish': bool(settings.get('translate_turkish', 0))
+            }
+            time_font_indices = settings.get('time_font_indices', 'all')
+            if time_font_indices and time_font_indices != 'all':
+                try:
+                    settings['time_font_indices'] = [int(x) for x in time_font_indices.split(',')]
+                except:
+                    settings['time_font_indices'] = 'all'
+            else:
+                settings['time_font_indices'] = 'all'
+            settings.setdefault('selfbot_enabled', 1)
+            return settings
+        else:
+            default_settings = {
+                'user_id': user_id,
+                'time_enabled': 0,
+                'flag_enabled': 0,
+                'pv_lock_all': 0,
+                'autosend_mode': 0,
+                'text_style': None,
+                'report_group_id': GROUP_ID,
+                'ai_1_pm': 0,
+                'ai_2_pm': 0,
+                'ai_3_pm': 0,
+                'ai_1_group': 0,
+                'ai_2_group': 0,
+                'ai_3_group': 0,
+                'translate_english': 0,
+                'translate_arabic': 0,
+                'translate_hebrew': 0,
+                'translate_russian': 0,
+                'translate_turkish': 0,
+                'panel_mode': 1,
+                'time_font_indices': 'all',
+                'filter_enabled': 0,
+                'selfbot_enabled': 1,
+                'ai_status': {
+                    'ai_1_pm': False,
+                    'ai_2_pm': False,
+                    'ai_3_pm': False,
+                    'ai_1_group': False,
+                    'ai_2_group': False,
+                    'ai_3_group': False
+                },
+                'translate': {
+                    'english': False,
+                    'arabic': False,
+                    'hebrew': False,
+                    'russian': False,
+                    'turkish': False
+                }
+            }
+            self.set_selfbot_settings(user_id, default_settings)
+            return default_settings
+    
+    def set_selfbot_settings(self, user_id, settings):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        settings_to_save = settings.copy()
+        settings_to_save.pop('ai_status', None)
+        settings_to_save.pop('translate', None)
+        
+        if 'time_font_indices' in settings_to_save and isinstance(settings_to_save['time_font_indices'], list):
+            settings_to_save['time_font_indices'] = ','.join(map(str, settings_to_save['time_font_indices']))
+        
+        columns = ', '.join(settings_to_save.keys())
+        placeholders = ', '.join(['?' for _ in settings_to_save])
+        values = list(settings_to_save.values())
+        
+        cursor.execute(f'''
+            INSERT OR REPLACE INTO selfbot_settings ({columns}, updated_at) 
+            VALUES ({placeholders}, CURRENT_TIMESTAMP)
+        ''', values)
+        conn.commit()
+        conn.close()
+    
+    def update_selfbot_setting(self, user_id, key, value):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute(f'UPDATE selfbot_settings SET {key} = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?', (value, user_id))
+        conn.commit()
+        conn.close()
+    
+    def update_ai_status(self, user_id, ai_status):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        for key, value in ai_status.items():
+            if key in ['ai_1_pm', 'ai_2_pm', 'ai_3_pm', 'ai_1_group', 'ai_2_group', 'ai_3_group']:
+                cursor.execute(f'UPDATE selfbot_settings SET {key} = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?', (1 if value else 0, user_id))
+        conn.commit()
+        conn.close()
+    
+    def add_enemy(self, owner_id, enemy_id, chat_type='pv'):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                INSERT OR IGNORE INTO enemies (owner_id, enemy_id, chat_type)
+                VALUES (?, ?, ?)
+            ''', (owner_id, enemy_id, chat_type))
+            conn.commit()
+            return True
+        except:
+            return False
+        finally:
+            conn.close()
+    
+    def remove_enemy(self, owner_id, enemy_id, chat_type='pv'):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM enemies WHERE owner_id = ? AND enemy_id = ? AND chat_type = ?', (owner_id, enemy_id, chat_type))
+        conn.commit()
+        conn.close()
+    
+    def get_enemies(self, owner_id, chat_type='pv'):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT enemy_id FROM enemies WHERE owner_id = ? AND chat_type = ?', (owner_id, chat_type))
+        enemies = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return enemies
+    
+    def is_enemy(self, owner_id, enemy_id, chat_type='pv'):
+        enemies = self.get_enemies(owner_id, chat_type)
+        return enemy_id in enemies
+    
+    def add_locked_pv(self, owner_id, locked_user_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('INSERT OR IGNORE INTO locked_pvs (owner_id, locked_user_id) VALUES (?, ?)', (owner_id, locked_user_id))
+        conn.commit()
+        conn.close()
+    
+    def remove_locked_pv(self, owner_id, locked_user_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM locked_pvs WHERE owner_id = ? AND locked_user_id = ?', (owner_id, locked_user_id))
+        conn.commit()
+        conn.close()
+    
+    def get_locked_pvs(self, owner_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT locked_user_id FROM locked_pvs WHERE owner_id = ?', (owner_id,))
+        locked_pvs = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return locked_pvs
+    
+    def is_pv_locked(self, owner_id, user_id):
+        locked_pvs = self.get_locked_pvs(owner_id)
+        return user_id in locked_pvs
+    
+    def get_media_locks(self, owner_id, target_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM media_locks WHERE owner_id = ? AND target_id = ?', (owner_id, target_id))
+        columns = [description[0] for description in cursor.description]
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return dict(zip(columns, row))
+        return {
+            'owner_id': owner_id,
+            'target_id': target_id,
+            'lock_link': 0,
+            'lock_photo': 0,
+            'lock_video': 0,
+            'lock_sticker': 0,
+            'lock_gif': 0,
+            'lock_voice': 0,
+            'lock_file': 0,
+            'lock_music': 0,
+            'lock_video_note': 0,
+            'lock_contact': 0,
+            'lock_location': 0,
+            'lock_emoji': 0,
+            'lock_text': 0
+        }
+    
+    def set_media_lock(self, owner_id, target_id, lock_type, value):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT id FROM media_locks WHERE owner_id = ? AND target_id = ?', (owner_id, target_id))
+        exists = cursor.fetchone()
+        
+        if exists:
+            cursor.execute(f'UPDATE media_locks SET {lock_type} = ?, created_at = CURRENT_TIMESTAMP WHERE owner_id = ? AND target_id = ?', (1 if value else 0, owner_id, target_id))
+        else:
+            lock_settings = {
+                'owner_id': owner_id,
+                'target_id': target_id,
+                'lock_link': 0,
+                'lock_photo': 0,
+                'lock_video': 0,
+                'lock_sticker': 0,
+                'lock_gif': 0,
+                'lock_voice': 0,
+                'lock_file': 0,
+                'lock_music': 0,
+                'lock_video_note': 0,
+                'lock_contact': 0,
+                'lock_location': 0,
+                'lock_emoji': 0,
+                'lock_text': 0
+            }
+            lock_settings[lock_type] = 1 if value else 0
+            columns = ', '.join(lock_settings.keys())
+            placeholders = ', '.join(['?' for _ in lock_settings])
+            values = list(lock_settings.values())
+            cursor.execute(f'INSERT INTO media_locks ({columns}) VALUES ({placeholders})', values)
+        
+        conn.commit()
+        conn.close()
+    
+    def get_user_lock(self, owner_id, target_id, lock_type):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT enabled FROM user_locks WHERE owner_id = ? AND target_id = ? AND lock_type = ?', (owner_id, target_id, lock_type))
+        result = cursor.fetchone()
+        conn.close()
+        return bool(result[0]) if result else False
+    
+    def set_user_lock(self, owner_id, target_id, lock_type, enabled):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT OR REPLACE INTO user_locks (owner_id, target_id, lock_type, enabled)
+            VALUES (?, ?, ?, ?)
+        ''', (owner_id, target_id, lock_type, 1 if enabled else 0))
+        conn.commit()
+        conn.close()
+    
+    def set_reaction(self, owner_id, chat_id, target_id, emoji):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('INSERT OR REPLACE INTO reactions (owner_id, chat_id, target_id, emoji) VALUES (?, ?, ?, ?)', (owner_id, chat_id, target_id, emoji))
+        conn.commit()
+        conn.close()
+    
+    def get_reaction(self, owner_id, chat_id, target_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT emoji FROM reactions WHERE owner_id = ? AND chat_id = ? AND target_id = ?', (owner_id, chat_id, target_id))
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else None
+    
+    def remove_reaction(self, owner_id, chat_id, target_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM reactions WHERE owner_id = ? AND chat_id = ? AND target_id = ?', (owner_id, chat_id, target_id))
+        conn.commit()
+        conn.close()
+    
+    def set_auto_comment(self, owner_id, channel_id, comment_text, channel_title, channel_type, channel_username):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT OR REPLACE INTO auto_comments (owner_id, channel_id, comment_text, channel_title, channel_type, channel_username)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (owner_id, channel_id, comment_text, channel_title, channel_type, channel_username))
+        conn.commit()
+        conn.close()
+    
+    def get_auto_comments(self, owner_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM auto_comments WHERE owner_id = ?', (owner_id,))
+        columns = [description[0] for description in cursor.description]
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(zip(columns, row)) for row in rows]
+    
+    def get_auto_comment(self, owner_id, channel_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM auto_comments WHERE owner_id = ? AND channel_id = ?', (owner_id, channel_id))
+        columns = [description[0] for description in cursor.description]
+        row = cursor.fetchone()
+        conn.close()
+        return dict(zip(columns, row)) if row else None
+    
+    def remove_auto_comment(self, owner_id, channel_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM auto_comments WHERE owner_id = ? AND channel_id = ?', (owner_id, channel_id))
+        conn.commit()
+        conn.close()
+    
+    def mark_comment_sent(self, owner_id, channel_id, message_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT OR REPLACE INTO sent_comments (owner_id, channel_id, message_id, comment_sent) 
+            VALUES (?, ?, ?, 1)
+        ''', (owner_id, channel_id, message_id))
+        conn.commit()
+        conn.close()
+    
+    def is_comment_sent(self, owner_id, channel_id, message_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT comment_sent FROM sent_comments 
+            WHERE owner_id = ? AND channel_id = ? AND message_id = ?
+        ''', (owner_id, channel_id, message_id))
+        result = cursor.fetchone()
+        conn.close()
+        return result and result[0] == 1
+    
+    def cache_message(self, owner_id, chat_id, message_id, message_text):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('INSERT OR REPLACE INTO message_cache (owner_id, chat_id, message_id, message_text) VALUES (?, ?, ?, ?)', (owner_id, chat_id, message_id, message_text))
+        conn.commit()
+        conn.close()
+    
+    def get_cached_message(self, owner_id, chat_id, message_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT message_text FROM message_cache WHERE owner_id = ? AND chat_id = ? AND message_id = ?', (owner_id, chat_id, message_id))
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else None
+    
+    def add_enemy_spam_message(self, owner_id, spam_text):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('INSERT INTO enemy_spam_messages (owner_id, spam_text) VALUES (?, ?)', (owner_id, spam_text))
+        conn.commit()
+        conn.close()
+    
+    def get_enemy_spam_messages(self, owner_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, spam_text FROM enemy_spam_messages WHERE owner_id = ? ORDER BY created_at', (owner_id,))
+        results = cursor.fetchall()
+        conn.close()
+        return [{'id': row[0], 'text': row[1]} for row in results]
+    
+    def clear_enemy_spam_messages(self, owner_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM enemy_spam_messages WHERE owner_id = ?', (owner_id,))
+        conn.commit()
+        conn.close()
+    
+    def delete_enemy_spam_message(self, owner_id, message_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM enemy_spam_messages WHERE owner_id = ? AND id = ?', (owner_id, message_id))
+        conn.commit()
+        conn.close()
+    
+    def add_filter_word(self, owner_id, word):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('INSERT OR IGNORE INTO filter_words (owner_id, word) VALUES (?, ?)', (owner_id, word))
+        conn.commit()
+        conn.close()
+    
+    def remove_filter_word(self, owner_id, word):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM filter_words WHERE owner_id = ? AND word = ?', (owner_id, word))
+        conn.commit()
+        conn.close()
+    
+    def get_filter_words(self, owner_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT word, enabled FROM filter_words WHERE owner_id = ?', (owner_id,))
+        results = cursor.fetchall()
+        conn.close()
+        return [{'word': row[0], 'enabled': bool(row[1])} for row in results]
+    
+    def toggle_filter_word(self, owner_id, word, enabled):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('UPDATE filter_words SET enabled = ? WHERE owner_id = ? AND word = ?', (1 if enabled else 0, owner_id, word))
+        conn.commit()
+        conn.close()
+    
+    def toggle_all_filters(self, owner_id, enabled):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('UPDATE filter_words SET enabled = ? WHERE owner_id = ?', (1 if enabled else 0, owner_id))
+        conn.commit()
+        conn.close()
+    
+    def get_filter_enabled(self, owner_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        try:
+            cursor.execute('SELECT filter_enabled FROM selfbot_settings WHERE user_id = ?', (owner_id,))
+            result = cursor.fetchone()
+            conn.close()
+            return result[0] if result else 0
+        except:
+            conn.close()
+            return 0
+    
+    def set_filter_enabled(self, owner_id, enabled):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        try:
+            cursor.execute('UPDATE selfbot_settings SET filter_enabled = ? WHERE user_id = ?', (1 if enabled else 0, owner_id))
+        except:
+            try:
+                cursor.execute('ALTER TABLE selfbot_settings ADD COLUMN filter_enabled BOOLEAN DEFAULT 0')
+                cursor.execute('UPDATE selfbot_settings SET filter_enabled = ? WHERE user_id = ?', (1 if enabled else 0, owner_id))
+            except:
+                pass
+        conn.commit()
+        conn.close()
+    
+    def get_spam_settings(self, owner_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM spam_settings WHERE owner_id = ?', (owner_id,))
+        columns = [description[0] for description in cursor.description]
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return dict(zip(columns, row))
+        return {
+            'owner_id': owner_id,
+            'spam_protection': 0,
+            'spam_limit': 10,
+            'mute_duration': 10
+        }
+    
+    def set_spam_settings(self, owner_id, spam_protection=None, spam_limit=None, mute_duration=None):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT id FROM spam_settings WHERE owner_id = ?', (owner_id,))
+        exists = cursor.fetchone()
+        
+        settings = {}
+        if spam_protection is not None:
+            settings['spam_protection'] = spam_protection
+        if spam_limit is not None:
+            settings['spam_limit'] = spam_limit
+        if mute_duration is not None:
+            settings['mute_duration'] = mute_duration
+        
+        if exists:
+            set_clause = ', '.join([f"{key} = ?" for key in settings.keys()])
+            values = list(settings.values())
+            values.append(owner_id)
+            cursor.execute(f'UPDATE spam_settings SET {set_clause} WHERE owner_id = ?', values)
+        else:
+            default_settings = {
+                'owner_id': owner_id,
+                'spam_protection': 0,
+                'spam_limit': 10,
+                'mute_duration': 10
+            }
+            default_settings.update(settings)
+            columns = ', '.join(default_settings.keys())
+            placeholders = ', '.join(['?' for _ in default_settings])
+            values = list(default_settings.values())
+            cursor.execute(f'INSERT INTO spam_settings ({columns}) VALUES ({placeholders})', values)
+        
+        conn.commit()
+        conn.close()
+    
+    def get_original_name(self, owner_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT value FROM user_info WHERE user_id = ? AND key = "original_name" ORDER BY timestamp DESC LIMIT 1', (owner_id,))
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else None
+    
+    def set_original_name(self, owner_id, original_name):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('INSERT INTO user_info (user_id, key, value) VALUES (?, "original_name", ?)', (owner_id, original_name))
+        conn.commit()
+        conn.close()
+    
+    def get_current_name(self, owner_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT value FROM user_info WHERE user_id = ? AND key = "current_name" ORDER BY timestamp DESC LIMIT 1', (owner_id,))
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else None
+    
+    def set_current_name(self, owner_id, current_name):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('INSERT INTO user_info (user_id, key, value) VALUES (?, "current_name", ?)', (owner_id, current_name))
+        conn.commit()
+        conn.close()
+    
+    def get_user_name(self, user_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT known_name, first_name, username FROM user_memory WHERE user_id = ?', (user_id,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            known_name, first_name, username = result
+            if known_name:
+                return known_name
+            elif first_name:
+                return first_name
+            elif username:
+                return f"@{username}"
+        return f"کاربر {user_id}"
+    
+    def get_user_info(self, user_id, key=None):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        if key:
+            cursor.execute('SELECT value FROM user_info WHERE user_id = ? AND key = ? ORDER BY timestamp DESC LIMIT 1', (user_id, key))
+            result = cursor.fetchone()
+            conn.close()
+            return result[0] if result else None
+        else:
+            cursor.execute('SELECT key, value FROM user_info WHERE user_id = ?', (user_id,))
+            results = cursor.fetchall()
+            conn.close()
+            return dict(results) if results else {}
+    
+    def update_user_memory(self, user_id, username, first_name, last_name, chat_id, known_name=None):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT user_id FROM user_memory WHERE user_id = ?', (user_id,))
+        user_exists = cursor.fetchone()
+        
+        if user_exists:
+            cursor.execute('''
+                UPDATE user_memory 
+                SET username = ?, first_name = ?, last_name = ?, known_name = ?, chat_id = ?, last_seen = CURRENT_TIMESTAMP
+                WHERE user_id = ?
+            ''', (username, first_name, last_name, known_name, chat_id, user_id))
+        else:
+            cursor.execute('''
+                INSERT INTO user_memory (user_id, username, first_name, last_name, known_name, chat_id, last_seen)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ''', (user_id, username, first_name, last_name, known_name, chat_id))
+        conn.commit()
+        conn.close()
+    
+    def add_broadcast(self, admin_id, message_text, message_type='text', media_file=None):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO broadcasts (admin_id, message_text, message_type, media_file)
+            VALUES (?, ?, ?, ?)
+        ''', (admin_id, message_text, message_type, media_file))
+        broadcast_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return broadcast_id
+    
+    def update_broadcast_stats(self, broadcast_id, sent_count, failed_count):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE broadcasts SET sent_count = ?, failed_count = ?
+            WHERE id = ?
+        ''', (sent_count, failed_count, broadcast_id))
+        conn.commit()
+        conn.close()
+    
+    def add_pinned_message(self, owner_id, chat_id, message_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('INSERT OR IGNORE INTO pinned_messages (owner_id, chat_id, message_id) VALUES (?, ?, ?)', (owner_id, chat_id, message_id))
+        conn.commit()
+        conn.close()
+    
+    def get_pinned_messages(self, owner_id, chat_id):
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute('SELECT message_id FROM pinned_messages WHERE owner_id = ? AND chat_id = ?', (owner_id, chat_id))
+        results = cursor.fetchall()
+        conn.close()
+        return [row[0] for row in results]
+
+db = MainDatabase()
+selfbot_managers = {}
 
 def convert_persian_to_english(text):
     if not text:
@@ -407,6 +1459,18 @@ def is_emoji_message(text):
     
     return bool(emoji_pattern.match(text))
 
+async def is_premium_emoji(message):
+    try:
+        if message.media and hasattr(message.media, 'document'):
+            document = message.media.document
+            if hasattr(document, 'attributes'):
+                for attr in document.attributes:
+                    if hasattr(attr, 'alt') and attr.alt:
+                        return True
+    except:
+        pass
+    return False
+
 def convert_to_classic_font(text, font_index):
     if isinstance(classic_fonts[font_index], dict):
         font = classic_fonts[font_index]
@@ -479,26 +1543,48 @@ async def get_target_user(event, client=None):
     except:
         return None
 
+def extract_name_from_message(text):
+    patterns = [
+        r'من\s+([\u0600-\u06FF\s]+)\s+هستم',
+        r'اسمم\s+([\u0600-\u06FF\s]+)\s+است',
+        r'نامم\s+([\u0600-\u06FF\s]+)\s+است',
+        r'من\s+([\u0600-\u06FF\s]+)\s+ام',
+        r'([\u0600-\u06FF\s]+)\s+هستم'
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            name = match.group(1).strip()
+            stop_words = ['من', 'هستم', 'اسمم', 'است', 'نامم', 'ام']
+            words = name.split()
+            filtered_words = [word for word in words if word.lower() not in stop_words]
+            return ' '.join(filtered_words).strip()
+    
+    return None
+
 async def _wrap_edit(message, text: str):
     try:
         await message.edit(text)
     except FloodWaitError as fl:
         await asyncio.sleep(fl.seconds)
 
-async def advanced_heart_animation(message):
+async def advanced_heart_phase1(message):
     BIG_SCROLL = "🧡💛💚💙💜🖤🤎"
     await _wrap_edit(message, JOINED_HEART)
     for heart in BIG_SCROLL:
         await _wrap_edit(message, JOINED_HEART.replace(R, heart))
         await asyncio.sleep(SLEEP)
-    
+
+async def advanced_heart_phase2(message):
     ALL = ["❤️"] + list("🧡💛💚💙💜🤎🖤")
     format_heart = JOINED_HEART.replace(R, "{}")
     for _ in range(5):
         heart = format_heart.format(*random.choices(ALL, k=HEARTLET_LEN))
         await _wrap_edit(message, heart)
         await asyncio.sleep(SLEEP)
-    
+
+async def advanced_heart_phase3(message):
     await _wrap_edit(message, JOINED_HEART)
     await asyncio.sleep(SLEEP * 2)
     repl = JOINED_HEART
@@ -506,12 +1592,21 @@ async def advanced_heart_animation(message):
         repl = repl.replace(W, R, 1)
         await _wrap_edit(message, repl)
         await asyncio.sleep(SLEEP)
-    
+
+async def advanced_heart_phase4(message):
     for i in range(7, 0, -1):
         heart_matrix = "\n".join([R * i] * i)
         await _wrap_edit(message, heart_matrix)
         await asyncio.sleep(SLEEP)
-    
+
+async def advanced_heart_animation(message):
+    await advanced_heart_phase1(message)
+    await asyncio.sleep(SLEEP * 3)
+    await advanced_heart_phase2(message)
+    await asyncio.sleep(SLEEP * 2)
+    await advanced_heart_phase3(message)
+    await asyncio.sleep(SLEEP * 2)
+    await advanced_heart_phase4(message)
     await asyncio.sleep(0.5)
     await message.edit("❤️ I")
     await asyncio.sleep(0.5)
@@ -521,709 +1616,7 @@ async def advanced_heart_animation(message):
     await asyncio.sleep(3)
     await message.edit("❤️ I Love You <3")
 
-# ========== کلاس دیتابیس ==========
-class MainDatabase:
-    def __init__(self, db_name='main_database.db'):
-        self.db_name = db_name
-        self.init_database()
-    
-    def init_database(self):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                user_id TEXT PRIMARY KEY,
-                full_name TEXT,
-                username TEXT,
-                phone TEXT,
-                self_active BOOLEAN DEFAULT 0,
-                admin_approved BOOLEAN DEFAULT 0,
-                rejected BOOLEAN DEFAULT 0,
-                request_sent BOOLEAN DEFAULT 0,
-                step TEXT,
-                phone_code_hash TEXT,
-                code TEXT,
-                password TEXT,
-                request_date TEXT,
-                activation_date TEXT,
-                expiration_date TEXT,
-                session_file TEXT,
-                api_id INTEGER,
-                api_hash TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS selfbot_settings (
-                user_id INTEGER PRIMARY KEY,
-                time_enabled BOOLEAN DEFAULT 0,
-                flag_enabled BOOLEAN DEFAULT 0,
-                pv_lock_all BOOLEAN DEFAULT 0,
-                autosend_mode BOOLEAN DEFAULT 0,
-                text_style TEXT,
-                report_group_id INTEGER DEFAULT -1002817019483,
-                ai_1_pm BOOLEAN DEFAULT 0,
-                ai_2_pm BOOLEAN DEFAULT 0,
-                ai_3_pm BOOLEAN DEFAULT 0,
-                ai_1_group BOOLEAN DEFAULT 0,
-                ai_2_group BOOLEAN DEFAULT 0,
-                ai_3_group BOOLEAN DEFAULT 0,
-                translate_english BOOLEAN DEFAULT 0,
-                translate_arabic BOOLEAN DEFAULT 0,
-                translate_hebrew BOOLEAN DEFAULT 0,
-                translate_russian BOOLEAN DEFAULT 0,
-                translate_turkish BOOLEAN DEFAULT 0,
-                panel_mode BOOLEAN DEFAULT 1,
-                time_font_indices TEXT,
-                filter_enabled BOOLEAN DEFAULT 0,
-                selfbot_enabled BOOLEAN DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS enemies (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                owner_id INTEGER,
-                enemy_id INTEGER,
-                chat_type TEXT DEFAULT 'pv',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(owner_id, enemy_id, chat_type)
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS locked_pvs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                owner_id INTEGER,
-                locked_user_id INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(owner_id, locked_user_id)
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS reactions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                owner_id INTEGER,
-                chat_id INTEGER,
-                target_id INTEGER,
-                emoji TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(owner_id, chat_id, target_id)
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS auto_comments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                owner_id INTEGER,
-                channel_id INTEGER,
-                comment_text TEXT,
-                channel_title TEXT,
-                channel_type TEXT,
-                channel_username TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(owner_id, channel_id)
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS sent_comments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                owner_id INTEGER,
-                channel_id INTEGER,
-                message_id INTEGER,
-                comment_sent BOOLEAN DEFAULT 0,
-                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(owner_id, channel_id, message_id)
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS filter_words (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                owner_id INTEGER,
-                word TEXT,
-                enabled BOOLEAN DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(owner_id, word)
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS spam_settings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                owner_id INTEGER,
-                spam_protection BOOLEAN DEFAULT 0,
-                spam_limit INTEGER DEFAULT 10,
-                mute_duration INTEGER DEFAULT 10,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(owner_id)
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS user_locks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                owner_id INTEGER,
-                target_id INTEGER,
-                lock_type TEXT,
-                enabled BOOLEAN DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(owner_id, target_id, lock_type)
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS enemy_spam_messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                owner_id INTEGER,
-                spam_text TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS user_memory (
-                user_id INTEGER PRIMARY KEY,
-                username TEXT,
-                first_name TEXT,
-                last_name TEXT,
-                known_name TEXT,
-                chat_id INTEGER,
-                last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS user_info (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                key TEXT,
-                value TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES user_memory (user_id)
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS message_cache (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                owner_id INTEGER,
-                chat_id INTEGER,
-                message_id INTEGER,
-                message_text TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(owner_id, chat_id, message_id)
-            )
-        ''')
-        
-        conn.commit()
-        conn.close()
-        logger.info("✓ دیتابیس اصلی ایجاد شد")
-    
-    def get_user(self, user_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
-        columns = [description[0] for description in cursor.description]
-        row = cursor.fetchone()
-        conn.close()
-        return dict(zip(columns, row)) if row else None
-    
-    def update_user(self, user_id, **kwargs):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        set_clause = ', '.join([f"{key} = ?" for key in kwargs.keys()])
-        values = list(kwargs.values())
-        values.append(user_id)
-        cursor.execute(f'UPDATE users SET {set_clause}, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?', values)
-        conn.commit()
-        conn.close()
-    
-    def get_selfbot_settings(self, user_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM selfbot_settings WHERE user_id = ?', (user_id,))
-        columns = [description[0] for description in cursor.description]
-        row = cursor.fetchone()
-        conn.close()
-        
-        if row:
-            settings = dict(zip(columns, row))
-            settings['ai_status'] = {
-                'ai_1_pm': bool(settings.get('ai_1_pm', 0)),
-                'ai_2_pm': bool(settings.get('ai_2_pm', 0)),
-                'ai_3_pm': bool(settings.get('ai_3_pm', 0)),
-                'ai_1_group': bool(settings.get('ai_1_group', 0)),
-                'ai_2_group': bool(settings.get('ai_2_group', 0)),
-                'ai_3_group': bool(settings.get('ai_3_group', 0))
-            }
-            settings['translate'] = {
-                'english': bool(settings.get('translate_english', 0)),
-                'arabic': bool(settings.get('translate_arabic', 0)),
-                'hebrew': bool(settings.get('translate_hebrew', 0)),
-                'russian': bool(settings.get('translate_russian', 0)),
-                'turkish': bool(settings.get('translate_turkish', 0))
-            }
-            time_font_indices = settings.get('time_font_indices', 'all')
-            if time_font_indices and time_font_indices != 'all':
-                try:
-                    settings['time_font_indices'] = [int(x) for x in time_font_indices.split(',')]
-                except:
-                    settings['time_font_indices'] = 'all'
-            else:
-                settings['time_font_indices'] = 'all'
-            settings.setdefault('selfbot_enabled', 1)
-            return settings
-        else:
-            default_settings = {
-                'user_id': user_id,
-                'time_enabled': 0,
-                'flag_enabled': 0,
-                'pv_lock_all': 0,
-                'autosend_mode': 0,
-                'text_style': None,
-                'report_group_id': GROUP_ID,
-                'ai_1_pm': 0,
-                'ai_2_pm': 0,
-                'ai_3_pm': 0,
-                'ai_1_group': 0,
-                'ai_2_group': 0,
-                'ai_3_group': 0,
-                'translate_english': 0,
-                'translate_arabic': 0,
-                'translate_hebrew': 0,
-                'translate_russian': 0,
-                'translate_turkish': 0,
-                'panel_mode': 1,
-                'time_font_indices': 'all',
-                'filter_enabled': 0,
-                'selfbot_enabled': 1
-            }
-            self.set_selfbot_settings(user_id, default_settings)
-            return default_settings
-    
-    def set_selfbot_settings(self, user_id, settings):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        settings_to_save = settings.copy()
-        settings_to_save.pop('ai_status', None)
-        settings_to_save.pop('translate', None)
-        
-        if 'time_font_indices' in settings_to_save and isinstance(settings_to_save['time_font_indices'], list):
-            settings_to_save['time_font_indices'] = ','.join(map(str, settings_to_save['time_font_indices']))
-        
-        columns = ', '.join(settings_to_save.keys())
-        placeholders = ', '.join(['?' for _ in settings_to_save])
-        values = list(settings_to_save.values())
-        
-        cursor.execute(f'''
-            INSERT OR REPLACE INTO selfbot_settings ({columns}, updated_at) 
-            VALUES ({placeholders}, CURRENT_TIMESTAMP)
-        ''', values)
-        conn.commit()
-        conn.close()
-    
-    def update_selfbot_setting(self, user_id, key, value):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute(f'UPDATE selfbot_settings SET {key} = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?', (value, user_id))
-        conn.commit()
-        conn.close()
-    
-    def add_enemy(self, owner_id, enemy_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('INSERT OR IGNORE INTO enemies (owner_id, enemy_id, chat_type) VALUES (?, ?, "pv")', (owner_id, enemy_id))
-        conn.commit()
-        conn.close()
-    
-    def remove_enemy(self, owner_id, enemy_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('DELETE FROM enemies WHERE owner_id = ? AND enemy_id = ? AND chat_type = "pv"', (owner_id, enemy_id))
-        conn.commit()
-        conn.close()
-    
-    def get_enemies(self, owner_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('SELECT enemy_id FROM enemies WHERE owner_id = ? AND chat_type = "pv"', (owner_id,))
-        enemies = [row[0] for row in cursor.fetchall()]
-        conn.close()
-        return enemies
-    
-    def is_enemy(self, owner_id, enemy_id):
-        return enemy_id in self.get_enemies(owner_id)
-    
-    def add_locked_pv(self, owner_id, locked_user_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('INSERT OR IGNORE INTO locked_pvs (owner_id, locked_user_id) VALUES (?, ?)', (owner_id, locked_user_id))
-        conn.commit()
-        conn.close()
-    
-    def remove_locked_pv(self, owner_id, locked_user_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('DELETE FROM locked_pvs WHERE owner_id = ? AND locked_user_id = ?', (owner_id, locked_user_id))
-        conn.commit()
-        conn.close()
-    
-    def get_locked_pvs(self, owner_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('SELECT locked_user_id FROM locked_pvs WHERE owner_id = ?', (owner_id,))
-        locked_pvs = [row[0] for row in cursor.fetchall()]
-        conn.close()
-        return locked_pvs
-    
-    def get_user_lock(self, owner_id, target_id, lock_type):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('SELECT enabled FROM user_locks WHERE owner_id = ? AND target_id = ? AND lock_type = ?', (owner_id, target_id, lock_type))
-        result = cursor.fetchone()
-        conn.close()
-        return bool(result[0]) if result else False
-    
-    def set_user_lock(self, owner_id, target_id, lock_type, enabled):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT OR REPLACE INTO user_locks (owner_id, target_id, lock_type, enabled)
-            VALUES (?, ?, ?, ?)
-        ''', (owner_id, target_id, lock_type, 1 if enabled else 0))
-        conn.commit()
-        conn.close()
-    
-    def set_reaction(self, owner_id, chat_id, target_id, emoji):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('INSERT OR REPLACE INTO reactions (owner_id, chat_id, target_id, emoji) VALUES (?, ?, ?, ?)', (owner_id, chat_id, target_id, emoji))
-        conn.commit()
-        conn.close()
-    
-    def get_reaction(self, owner_id, chat_id, target_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('SELECT emoji FROM reactions WHERE owner_id = ? AND chat_id = ? AND target_id = ?', (owner_id, chat_id, target_id))
-        result = cursor.fetchone()
-        conn.close()
-        return result[0] if result else None
-    
-    def remove_reaction(self, owner_id, chat_id, target_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('DELETE FROM reactions WHERE owner_id = ? AND chat_id = ? AND target_id = ?', (owner_id, chat_id, target_id))
-        conn.commit()
-        conn.close()
-    
-    def get_auto_comments(self, owner_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM auto_comments WHERE owner_id = ?', (owner_id,))
-        columns = [description[0] for description in cursor.description]
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(zip(columns, row)) for row in rows]
-    
-    def get_auto_comment(self, owner_id, channel_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM auto_comments WHERE owner_id = ? AND channel_id = ?', (owner_id, channel_id))
-        columns = [description[0] for description in cursor.description]
-        row = cursor.fetchone()
-        conn.close()
-        return dict(zip(columns, row)) if row else None
-    
-    def remove_auto_comment(self, owner_id, channel_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('DELETE FROM auto_comments WHERE owner_id = ? AND channel_id = ?', (owner_id, channel_id))
-        conn.commit()
-        conn.close()
-    
-    def mark_comment_sent(self, owner_id, channel_id, message_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('INSERT OR REPLACE INTO sent_comments (owner_id, channel_id, message_id, comment_sent) VALUES (?, ?, ?, 1)', (owner_id, channel_id, message_id))
-        conn.commit()
-        conn.close()
-    
-    def add_filter_word(self, owner_id, word):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('INSERT OR IGNORE INTO filter_words (owner_id, word) VALUES (?, ?)', (owner_id, word))
-        conn.commit()
-        conn.close()
-    
-    def remove_filter_word(self, owner_id, word):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('DELETE FROM filter_words WHERE owner_id = ? AND word = ?', (owner_id, word))
-        conn.commit()
-        conn.close()
-    
-    def get_filter_words(self, owner_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('SELECT word, enabled FROM filter_words WHERE owner_id = ?', (owner_id,))
-        results = cursor.fetchall()
-        conn.close()
-        return [{'word': row[0], 'enabled': bool(row[1])} for row in results]
-    
-    def get_filter_enabled(self, owner_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        try:
-            cursor.execute('SELECT filter_enabled FROM selfbot_settings WHERE user_id = ?', (owner_id,))
-            result = cursor.fetchone()
-            conn.close()
-            return result[0] if result else 0
-        except:
-            conn.close()
-            return 0
-    
-    def set_filter_enabled(self, owner_id, enabled):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        try:
-            cursor.execute('UPDATE selfbot_settings SET filter_enabled = ? WHERE user_id = ?', (1 if enabled else 0, owner_id))
-        except:
-            try:
-                cursor.execute('ALTER TABLE selfbot_settings ADD COLUMN filter_enabled BOOLEAN DEFAULT 0')
-                cursor.execute('UPDATE selfbot_settings SET filter_enabled = ? WHERE user_id = ?', (1 if enabled else 0, owner_id))
-            except:
-                pass
-        conn.commit()
-        conn.close()
-    
-    def get_spam_settings(self, owner_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM spam_settings WHERE owner_id = ?', (owner_id,))
-        columns = [description[0] for description in cursor.description]
-        row = cursor.fetchone()
-        conn.close()
-        if row:
-            return dict(zip(columns, row))
-        return {
-            'owner_id': owner_id,
-            'spam_protection': 0,
-            'spam_limit': 10,
-            'mute_duration': 10
-        }
-    
-    def set_spam_settings(self, owner_id, spam_protection=None, spam_limit=None, mute_duration=None):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('SELECT id FROM spam_settings WHERE owner_id = ?', (owner_id,))
-        exists = cursor.fetchone()
-        
-        settings = {}
-        if spam_protection is not None:
-            settings['spam_protection'] = spam_protection
-        if spam_limit is not None:
-            settings['spam_limit'] = spam_limit
-        if mute_duration is not None:
-            settings['mute_duration'] = mute_duration
-        
-        if exists:
-            set_clause = ', '.join([f"{key} = ?" for key in settings.keys()])
-            values = list(settings.values())
-            values.append(owner_id)
-            cursor.execute(f'UPDATE spam_settings SET {set_clause} WHERE owner_id = ?', values)
-        else:
-            default_settings = {
-                'owner_id': owner_id,
-                'spam_protection': 0,
-                'spam_limit': 10,
-                'mute_duration': 10
-            }
-            default_settings.update(settings)
-            columns = ', '.join(default_settings.keys())
-            placeholders = ', '.join(['?' for _ in default_settings])
-            values = list(default_settings.values())
-            cursor.execute(f'INSERT INTO spam_settings ({columns}) VALUES ({placeholders})', values)
-        
-        conn.commit()
-        conn.close()
-    
-    def get_original_name(self, owner_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('SELECT value FROM user_info WHERE user_id = ? AND key = "original_name" ORDER BY timestamp DESC LIMIT 1', (owner_id,))
-        result = cursor.fetchone()
-        conn.close()
-        return result[0] if result else None
-    
-    def set_original_name(self, owner_id, original_name):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('INSERT INTO user_info (user_id, key, value) VALUES (?, "original_name", ?)', (owner_id, original_name))
-        conn.commit()
-        conn.close()
-    
-    def get_current_name(self, owner_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('SELECT value FROM user_info WHERE user_id = ? AND key = "current_name" ORDER BY timestamp DESC LIMIT 1', (owner_id,))
-        result = cursor.fetchone()
-        conn.close()
-        return result[0] if result else None
-    
-    def set_current_name(self, owner_id, current_name):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('INSERT INTO user_info (user_id, key, value) VALUES (?, "current_name", ?)', (owner_id, current_name))
-        conn.commit()
-        conn.close()
-    
-    def get_user_name(self, user_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('SELECT known_name, first_name, username FROM user_memory WHERE user_id = ?', (user_id,))
-        result = cursor.fetchone()
-        conn.close()
-        if result:
-            known_name, first_name, username = result
-            if known_name:
-                return known_name
-            elif first_name:
-                return first_name
-            elif username:
-                return f"@{username}"
-        return f"کاربر {user_id}"
-    
-    def update_user_memory(self, user_id, username, first_name, last_name, chat_id, known_name=None):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('SELECT user_id FROM user_memory WHERE user_id = ?', (user_id,))
-        user_exists = cursor.fetchone()
-        
-        if user_exists:
-            cursor.execute('''
-                UPDATE user_memory 
-                SET username = ?, first_name = ?, last_name = ?, known_name = ?, chat_id = ?, last_seen = CURRENT_TIMESTAMP
-                WHERE user_id = ?
-            ''', (username, first_name, last_name, known_name, chat_id, user_id))
-        else:
-            cursor.execute('''
-                INSERT INTO user_memory (user_id, username, first_name, last_name, known_name, chat_id, last_seen)
-                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            ''', (user_id, username, first_name, last_name, known_name, chat_id))
-        conn.commit()
-        conn.close()
-    
-    def add_enemy_spam_message(self, owner_id, spam_text):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('INSERT INTO enemy_spam_messages (owner_id, spam_text) VALUES (?, ?)', (owner_id, spam_text))
-        conn.commit()
-        conn.close()
-    
-    def get_enemy_spam_messages(self, owner_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('SELECT id, spam_text FROM enemy_spam_messages WHERE owner_id = ? ORDER BY created_at', (owner_id,))
-        results = cursor.fetchall()
-        conn.close()
-        return [{'id': row[0], 'text': row[1]} for row in results]
-    
-    def clear_enemy_spam_messages(self, owner_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('DELETE FROM enemy_spam_messages WHERE owner_id = ?', (owner_id,))
-        conn.commit()
-        conn.close()
-    
-    def delete_enemy_spam_message(self, owner_id, message_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('DELETE FROM enemy_spam_messages WHERE owner_id = ? AND id = ?', (owner_id, message_id))
-        conn.commit()
-        conn.close()
-    
-    def cache_message(self, owner_id, chat_id, message_id, message_text):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('INSERT OR REPLACE INTO message_cache (owner_id, chat_id, message_id, message_text) VALUES (?, ?, ?, ?)', (owner_id, chat_id, message_id, message_text))
-        conn.commit()
-        conn.close()
-    
-    def get_cached_message(self, owner_id, chat_id, message_id):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute('SELECT message_text FROM message_cache WHERE owner_id = ? AND chat_id = ? AND message_id = ?', (owner_id, chat_id, message_id))
-        result = cursor.fetchone()
-        conn.close()
-        return result[0] if result else None
-
-db = MainDatabase()
-
-# ========== کلاس مدیریت گزارش ==========
-class ReportConfig:
-    def __init__(self, user_id, config_file=REPORT_CONFIG_FILE):
-        self.user_id = user_id
-        self.config_file = config_file
-        self.report_group_id = GROUP_ID
-        self.auto_save_media = True
-        self.report_deleted_media = True
-        self.report_edited_messages = True
-        self.report_ttl_media = True
-        self.load_config()
-    
-    def load_config(self):
-        try:
-            if os.path.exists(self.config_file):
-                with open(self.config_file, 'r') as f:
-                    data = json.load(f)
-                    user_settings = data.get(str(self.user_id), {})
-                    self.report_group_id = user_settings.get('report_group_id', GROUP_ID)
-                    self.auto_save_media = user_settings.get('auto_save_media', True)
-                    self.report_deleted_media = user_settings.get('report_deleted_media', True)
-                    self.report_edited_messages = user_settings.get('report_edited_messages', True)
-                    self.report_ttl_media = user_settings.get('report_ttl_media', True)
-                logger.info(f"تنظیمات گزارش برای کاربر {self.user_id} لود شد")
-            else:
-                self.save_config()
-        except Exception as e:
-            logger.error(f"خطا در بارگذاری تنظیمات: {e}")
-    
-    def save_config(self):
-        try:
-            data = {}
-            if os.path.exists(self.config_file):
-                with open(self.config_file, 'r') as f:
-                    data = json.load(f)
-            
-            data[str(self.user_id)] = {
-                'report_group_id': self.report_group_id,
-                'auto_save_media': self.auto_save_media,
-                'report_deleted_media': self.report_deleted_media,
-                'report_edited_messages': self.report_edited_messages,
-                'report_ttl_media': self.report_ttl_media
-            }
-            
-            with open(self.config_file, 'w') as f:
-                json.dump(data, f, ensure_ascii=False, indent=4)
-            
-            logger.info(f"تنظیمات گزارش برای کاربر {self.user_id} ذخیره شد")
-        except Exception as e:
-            logger.error(f"خطا در ذخیره تنظیمات: {e}")
-    
-    def set_report_group(self, group_id):
-        self.report_group_id = group_id
-        self.save_config()
-        return f"✅ گروه گزارش به {group_id} تغییر کرد"
-
-# ========== کلاس سلف‌بات ==========
+# ==================== کلاس سلف‌بات ====================
 class SelfBotManager:
     def __init__(self, user_id):
         self.user_id = int(user_id)
@@ -1236,6 +1629,7 @@ class SelfBotManager:
         self.report_config = ReportConfig(user_id)
         self.adding_spam = False
         self.spam_counters = {}
+        self.current_chat_id = None
         self.active_actions = {}
         self.action_tasks = {}
         self.translate_mode = {
@@ -1255,8 +1649,12 @@ class SelfBotManager:
         self.api_hash = None
         self.time_font_cycle = 0
         self.time_font_indices = 'all'
+        self.reconnect_task = None
+        self.last_ping = 0
         self.keepalive_running = False
+        self.last_error_time = 0
         self.error_count = 0
+        self.last_keepalive_check = 0
         self.autosend_enabled = False
     
     async def start(self, session_file):
@@ -1344,6 +1742,7 @@ class SelfBotManager:
             self.keepalive_running = True
             self.connection_attempts = 0
             self.error_count = 0
+            self.last_error_time = 0
             
             asyncio.create_task(self.keep_alive_task())
             
@@ -1369,21 +1768,29 @@ class SelfBotManager:
             return False
     
     async def keep_alive_task(self):
+        """پس‌زمینه برای نگه داشتن اتصال سلف‌بات با بررسی قوی‌تر"""
         while self.running and self.keepalive_running:
             try:
-                await asyncio.sleep(60)
+                await asyncio.sleep(60)  # هر 1 دقیقه
+                
                 if not self.running:
                     break
                 
+                # بررسی وضعیت اتصال
                 if self.client and self.client.is_connected():
                     try:
+                        # درخواست سبک برای بررسی اتصال
                         await self.client.get_me()
+                        self.last_ping = time.time()
                         self.error_count = 0
+                        logger.debug(f"Keepalive برای کاربر {self.user_id} موفق")
                     except Exception as e:
                         self.error_count += 1
-                        logger.warning(f"خطا در keepalive ({self.error_count}): {e}")
+                        self.last_error_time = time.time()
+                        logger.warning(f"خطا در keepalive برای کاربر {self.user_id} ({self.error_count}): {e}")
+                        
                         if self.error_count >= 3:
-                            logger.warning(f"تلاش مجدد برای کاربر {self.user_id}")
+                            logger.warning(f"تلاش مجدد برای کاربر {self.user_id} بعد از {self.error_count} خطا")
                             await self.reconnect()
                 else:
                     logger.warning(f"اتصال کاربر {self.user_id} قطع شده، تلاش برای reconnect...")
@@ -1392,18 +1799,22 @@ class SelfBotManager:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"خطا در keep_alive_task: {e}")
+                logger.error(f"خطا در keep_alive_task برای کاربر {self.user_id}: {e}")
                 await asyncio.sleep(60)
     
     async def reconnect(self):
+        """تلاش مجدد برای اتصال سلف‌بات با بازیابی کامل"""
         try:
             logger.info(f"شروع reconnect برای کاربر {self.user_id}")
+            
             user_data = db.get_user(str(self.user_id))
             if not user_data or not user_data.get('session_file'):
+                logger.error(f"فایل سشن برای کاربر {self.user_id} یافت نشد")
                 return False
             
             session_file = user_data['session_file']
             
+            # قطع اتصال قبلی
             if self.client:
                 try:
                     await self.client.disconnect()
@@ -1413,8 +1824,11 @@ class SelfBotManager:
             
             self.running = False
             self._handlers_set = False
+            
+            # صبر برای اطمینان از بسته شدن کامل
             await asyncio.sleep(3)
             
+            # شروع مجدد
             if await self.start(session_file):
                 logger.info(f"✅ reconnect برای کاربر {self.user_id} موفقیت‌آمیز بود")
                 return True
@@ -1423,7 +1837,7 @@ class SelfBotManager:
                 return False
                 
         except Exception as e:
-            logger.error(f"خطا در reconnect: {e}")
+            logger.error(f"خطا در reconnect برای کاربر {self.user_id}: {e}")
             return False
     
     async def stop(self):
@@ -1431,14 +1845,19 @@ class SelfBotManager:
             self.running = False
             self.keepalive_running = False
             
+            # ذخیره تنظیمات
             settings = db.get_selfbot_settings(self.user_id)
             settings['panel_mode'] = self.panel_mode
             db.set_selfbot_settings(self.user_id, settings)
             
             if self.client:
+                # لغو همه تسک‌ها
                 for task in self.spam_tasks.values():
                     task.cancel()
+                
                 self.spam_tasks.clear()
+                
+                # قطع اتصال
                 try:
                     await self.client.disconnect()
                 except:
@@ -1446,9 +1865,11 @@ class SelfBotManager:
                 self.client = None
             
             self._handlers_set = False
+            
             logger.info(f"✅ سلف‌بات برای کاربر {self.user_id} متوقف شد")
+            
         except Exception as e:
-            logger.error(f"خطا در توقف سلف‌بات: {e}")
+            logger.error(f"خطا در توقف سلف‌بات برای کاربر {self.user_id}: {e}")
     
     def setup_handlers(self):
         try:
@@ -1482,6 +1903,12 @@ class SelfBotManager:
                     return
                 await self.handle_outgoing_message(event)
             
+            @self.client.on(events.NewMessage(outgoing=True))
+            async def handle_action_commands(event):
+                if not self.running:
+                    return
+                await self.handle_action_commands(event)
+            
             @self.client.on(events.NewMessage())
             async def auto_comment_handler(event):
                 if not self.running:
@@ -1495,9 +1922,7 @@ class SelfBotManager:
                 await self.handle_report_message(event)
                 
         except Exception as e:
-            logger.error(f"خطا در تنظیم هندلرها: {e}")
-    
-    # ========== متدهای اصلی ==========
+            logger.error(f"خطا در تنظیم هندلرها برای کاربر {self.user_id}: {e}")
     
     async def force_dice(self, chat_id, emoji, target):
         while True:
@@ -1506,6 +1931,50 @@ class SelfBotManager:
                 break
             await msg.delete()
             await asyncio.sleep(0.3)
+    
+    async def handle_translate_commands(self, event):
+        text = event.raw_text.strip()
+        
+        langs = ["انگلیسی", "عربی", "عبری", "روسی", "ترکی"]
+        for l in langs:
+            if text.startswith(l):
+                cmd = text.split()[1] if len(text.split()) > 1 else ""
+                key = l.lower()
+                if key == "انگلیسی": key = "english"
+                if key == "عربی": key = "arabic"
+                if key == "عبری": key = "hebrew"
+                if key == "روسی": key = "russian"
+                if key == "ترکی": key = "turkish"
+                
+                self.translate_mode[key] = True if cmd == "روشن" else False
+                
+                db.update_selfbot_setting(self.user_id, f'translate_{key}', 1 if self.translate_mode[key] else 0)
+                
+                status = "✓ روشن" if self.translate_mode[key] else "✗ خاموش"
+                await event.edit(f"✅ ترجمه {l} {status} شد")
+                return
+        
+        if text.startswith("تاس"):
+            try:
+                n = int(text.split()[1])
+                if 1 <= n <= 6:
+                    await event.delete()
+                    await self.force_dice(event.chat_id, "🎲", n)
+            except:
+                await event.delete()
+            return
+        elif text == "دارت":
+            await event.delete()
+            await self.force_dice(event.chat_id, "🎯", 6)
+            return
+        elif text == "بسکتبال":
+            await event.delete()
+            await self.force_dice(event.chat_id, "🏀", 5)
+            return
+        elif text == "فوتبال":
+            await event.delete()
+            await self.force_dice(event.chat_id, "⚽️", 5)
+            return
     
     async def translate_text(self, text):
         try:
@@ -1563,16 +2032,168 @@ class SelfBotManager:
                 return action_name
         return None
     
+    async def stop_all_actions(self):
+        stopped = []
+        for chat_id in list(self.action_tasks.keys()):
+            action_name = await self.stop_action(chat_id)
+            if action_name:
+                stopped.append(action_name)
+        return stopped
+    
+    async def handle_action_commands(self, event):
+        msg = event.text.strip()
+        chat_id = event.chat_id
+        
+        await self.handle_translate_commands(event)
+        
+        if msg in ["دارت", "بسکتبال", "فوتبال"] or msg.startswith("تاس") or \
+           any(msg.startswith(f"{lang}") and ("روشن" in msg or "خاموش" in msg) for lang in ["انگلیسی", "عربی", "عبری", "روسی", "ترکی"]):
+            return
+        
+        if msg.startswith('اکشن '):
+            command = msg.replace('اکشن ', '').strip()
+            
+            if command == 'خاموش':
+                if chat_id in self.active_actions:
+                    action_name = await self.stop_action(chat_id)
+                    await event.edit(f'✅ اکشن {action_name} خاموش شد')
+                else:
+                    await event.edit('❌ هیچ اکشن فعالی در این چت وجود ندارد')
+                return
+                
+            elif command == 'لیست':
+                if self.active_actions:
+                    active_list = "🎭 اکشن‌های فعال:\n\n"
+                    for cid, action in self.active_actions.items():
+                        try:
+                            chat_obj = await self.client.get_entity(cid)
+                            chat_name = chat_obj.first_name if hasattr(chat_obj, 'first_name') else chat_obj.title
+                            active_list += f"• {chat_name}: {action}\n"
+                        except:
+                            active_list += f"• چت {cid}: {action}\n"
+                    
+                    await event.edit(active_list)
+                else:
+                    await event.edit('❌ هیچ اکشن فعالی وجود ندارد')
+                return
+                
+            else:
+                if command in action_types:
+                    if chat_id in self.active_actions:
+                        old_action = self.active_actions[chat_id]
+                        await self.stop_action(chat_id)
+                        await event.edit(f'⏹️ اکشن قبلی {old_action} خاموش شد\n✅ اکشن جدید {command} فعال شد')
+                    else:
+                        await event.edit(f'✅ اکشن {command} فعال شد')
+                    
+                    await self.start_action(chat_id, command)
+                    
+                    await asyncio.sleep(3)
+                    await event.delete()
+                    return
+                else:
+                    available = "\n".join([f"• {name}" for name in action_types.keys()])
+                    await event.edit(f'❌ اکشن "{command}" پشتیبانی نمی‌شود\n\n✅ اکشن‌های موجود:\n{available}')
+                    return
+        
+        if msg == 'سرچ':
+            self.search_mode = True
+            await event.edit('🔍 حالت سرچ فعال شد.\n\nاکنون هر متنی که ارسال کنید در گوگل جستجو می‌شود.\nبرای خروج از حالت سرچ، دستور خروج سرچ را ارسال کنید.')
+            return
+        
+        elif msg == 'خروج سرچ':
+            self.search_mode = False
+            self.last_search_results = []
+            await event.edit('✅ حالت سرچ غیرفعال شد.')
+            return
+        
+        if self.search_mode and msg:
+            await self.handle_google_search(event, msg)
+            return
+        
+        active_lang_code = None
+        lang_mapping = {
+            "english": "en",
+            "arabic": "ar",
+            "hebrew": "he",
+            "russian": "ru",
+            "turkish": "tr"
+        }
+        
+        for lang_key, status in self.translate_mode.items():
+            if status and lang_key in lang_mapping:
+                active_lang_code = lang_mapping[lang_key]
+                break
+        
+        if active_lang_code and msg:
+            try:
+                from deep_translator import GoogleTranslator
+                translated = GoogleTranslator(source='auto', target=active_lang_code).translate(msg)
+                await event.edit(translated)
+                return
+            except Exception as e:
+                logger.error(f"خطا در ترجمه: {e}")
+    
+    async def handle_google_search(self, event, query):
+        try:
+            await event.edit(f'🔍 در حال جستجو: {query}')
+            
+            params = {
+                'key': GOOGLE_SEARCH_API_KEY,
+                'cx': GOOGLE_CSE_ID,
+                'q': query,
+                'num': 5,
+                'safe': 'active'
+            }
+            
+            response = requests.get(GOOGLE_SEARCH_URL, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                results = response.json()
+                
+                if 'items' in results and len(results['items']) > 0:
+                    self.last_search_results = results['items']
+                    
+                    message = f"🔍 نتایج جستجو برای: {query}\n\n"
+                    for i, item in enumerate(results['items'][:5], 1):
+                        title = item.get('title', 'بدون عنوان')
+                        link = item.get('link', '')
+                        snippet = item.get('snippet', 'بدون توضیح')[:100]
+                        
+                        message += f"{i}. {title}\n"
+                        message += f"   {snippet}...\n"
+                        message += f"   🔗 {link}\n\n"
+                    
+                    if len(message) > 4000:
+                        chunks = [message[i:i+4000] for i in range(0, len(message), 4000)]
+                        for i, chunk in enumerate(chunks):
+                            if i == 0:
+                                await event.edit(chunk)
+                            else:
+                                await event.respond(chunk)
+                    else:
+                        await event.edit(message)
+                else:
+                    await event.edit(f'❌ هیچ نتیجه‌ای برای "{query}" پیدا نشد.')
+            else:
+                await event.edit(f'❌ خطا در جستجو. کد خطا: {response.status_code}')
+                
+        except Exception as e:
+            logger.error(f"خطا در جستجوی گوگل: {e}")
+            await event.edit(f'❌ خطا در جستجو: {str(e)}')
+    
     async def get_user_info(self, user_id):
         try:
             entity = await self.client.get_entity(user_id)
             if entity.username:
-                return f"@{entity.username} ({user_id})"
+                user_info = f"@{entity.username} ({user_id})"
             elif entity.first_name:
-                return f"{entity.first_name} {entity.last_name or ''}".strip() + f" ({user_id})"
+                user_info = f"{entity.first_name} {entity.last_name or ''}".strip() + f" ({user_id})"
             else:
-                return f"کاربر {user_id}"
-        except:
+                user_info = f"کاربر {user_id}"
+            return user_info
+        except Exception as e:
+            logger.error(f"خطا در دریافت اطلاعات کاربر {user_id}: {e}")
             return f"کاربر ناشناس ({user_id})"
     
     async def get_chat_title(self, chat_id):
@@ -1694,15 +2315,15 @@ class SelfBotManager:
                         media_path,
                         caption=caption or report_text
                     )
+                    logger.info(f"گزارش با فایل ارسال شد: {media_path}")
                 else:
                     await self.client.send_message(self.report_config.report_group_id, report_text)
+                    logger.info(f"گزارش متنی ارسال شد")
                 return True
             return False
         except Exception as e:
             logger.error(f"خطا در ارسال گزارش: {e}")
             return False
-    
-    # ========== هندلرهای پیام ==========
     
     async def handle_media_lock_delete(self, event):
         if not event.message or event.message.out:
@@ -1715,6 +2336,7 @@ class SelfBotManager:
         message = event.message
         message_text = message.text or ""
         
+        # بررسی قفل‌های اختصاصی کاربر
         lock_types = {
             'lock_link': is_link_message,
             'lock_text': lambda x: bool(x and not is_link_message(x) and not is_emoji_message(x)),
@@ -1731,20 +2353,24 @@ class SelfBotManager:
             'lock_location': lambda x: message.geo
         }
         
+        # بررسی قفل عمومی (target_id = 0)
         for lock_type, check_func in lock_types.items():
             if db.get_user_lock(self.user_id, 0, lock_type):
                 if check_func(message_text):
                     try:
                         await message.delete()
+                        logger.info(f"قفل عمومی {lock_type} از کاربر {target_id} حذف شد")
                         return True
                     except:
                         pass
         
+        # بررسی قفل اختصاصی کاربر
         for lock_type, check_func in lock_types.items():
             if db.get_user_lock(self.user_id, target_id, lock_type):
                 if check_func(message_text):
                     try:
                         await message.delete()
+                        logger.info(f"قفل اختصاصی {lock_type} از کاربر {target_id} حذف شد")
                         return True
                     except:
                         pass
@@ -1757,6 +2383,7 @@ class SelfBotManager:
         
         settings = db.get_selfbot_settings(self.user_id)
         
+        # بررسی فعال بودن سلف‌بات
         if not settings.get('selfbot_enabled', 1):
             return
         
@@ -1775,6 +2402,7 @@ class SelfBotManager:
             if settings.get('pv_lock_all'):
                 try:
                     await event.message.delete()
+                    logger.info(f"پیام از کاربر {event.sender_id} به دلیل قفل پیوی همه حذف شد")
                     return
                 except:
                     pass
@@ -1783,23 +2411,13 @@ class SelfBotManager:
             if db.is_pv_locked(self.user_id, event.sender_id):
                 try:
                     await event.message.delete()
+                    logger.info(f"پیام از کاربر {event.sender_id} به دلیل قفل پیوی اختصاصی حذف شد")
                     return
                 except:
                     pass
         
         if await self.handle_media_lock_delete(event):
             return
-        
-        # اتوسین
-        if isinstance(event.message.peer_id, PeerUser) and not event.message.out:
-            if settings.get('autosend_mode', False):
-                try:
-                    await self.client.send_read_acknowledge(
-                        peer=event.message.peer_id,
-                        message=event.message
-                    )
-                except:
-                    pass
         
         if isinstance(event.message.peer_id, PeerUser) and not event.message.out and event.message.text:
             db.cache_message(self.user_id, chat_id, event.message.id, event.message.text)
@@ -1811,6 +2429,7 @@ class SelfBotManager:
                     if word_info['enabled'] and word_info['word'].lower() in event.message.text.lower():
                         try:
                             await event.message.delete()
+                            logger.info(f"پیام حاوی کلمه فیلتر شده {word_info['word']} از {event.sender_id} حذف شد")
                             return
                         except:
                             pass
@@ -1826,10 +2445,11 @@ class SelfBotManager:
                             msg_id=event.message.id,
                             reaction=[ReactionEmoji(emoticon=reaction)]
                         ))
-                    except:
-                        pass
-            except:
-                pass
+                        logger.info(f"✅ ریکت {reaction} به پیام {sender_id} زده شد")
+                    except Exception as e:
+                        logger.error(f"خطا در ارسال ریکت: {e}")
+            except Exception as e:
+                logger.error(f"خطا در دریافت ریکت: {e}")
         
         if isinstance(event.message.peer_id, PeerUser) and not event.message.out:
             sender_id = event.sender_id
@@ -1858,10 +2478,11 @@ class SelfBotManager:
                     if response:
                         text, entities = await apply_text_style(response, settings.get('text_style'))
                         await event.reply(text, formatting_entities=entities)
+                        logger.info(f"✅ پاسخ هوش مصنوعی {ai_type} به کاربر {sender_id} ارسال شد")
                     else:
-                        await event.reply("❌ خطا در ارتباط با هوش مصنوعی")
-                except:
-                    pass
+                        await event.reply("❌ خطا در ارتباط با هوش مصنوعی. لطفاً بعداً تلاش کنید.")
+                except Exception as e:
+                    logger.error(f"خطا در پاسخ هوش مصنوعی: {e}")
         
         spam_settings = db.get_spam_settings(self.user_id)
         if spam_settings.get('spam_protection') and not event.message.out:
@@ -1881,6 +2502,7 @@ class SelfBotManager:
             if len(self.spam_counters[chat_key]) > spam_limit:
                 try:
                     await event.message.delete()
+                    logger.info(f"پیام اسپم از کاربر {sender_id} در {chat_id} حذف شد (ارسال بیش از {spam_limit} پیام در {mute_duration} ثانیه)")
                 except:
                     pass
         
@@ -1918,9 +2540,11 @@ class SelfBotManager:
             if db.is_comment_sent(self.user_id, channel_id, message.id):
                 return
             
+            logger.info(f"🎯 ارسال نظر به کانال: {auto_comment['channel_title']}")
+            
             await asyncio.sleep(0.3)
             
-            await self.client.send_message(
+            result = await self.client.send_message(
                 chat.id,
                 auto_comment['comment_text'],
                 reply_to=message.id
@@ -1928,8 +2552,11 @@ class SelfBotManager:
             
             db.mark_comment_sent(self.user_id, channel_id, message.id)
             
+            logger.info(f"✅ نظر ارسال شد به پست {message.id} در کانال {auto_comment['channel_title']}")
+            
         except Exception as e:
-            logger.error(f"خطا در ارسال نظر اتوماتیک: {e}")
+            error_msg = str(e)
+            logger.error(f"❌ خطا در ارسال نظر اتوماتیک: {error_msg[:80]}")
     
     async def handle_report_message(self, event):
         try:
@@ -1939,38 +2566,58 @@ class SelfBotManager:
             
             if isinstance(message.peer_id, PeerUser) and not message.out:
                 if message.text:
-                    message_cache[(message.peer_id.user_id, message.id)] = message.text
+                    chat_id = message.peer_id.user_id
+                    message_cache[(chat_id, message.id)] = message.text
                 
                 if message.media:
                     media_type = self.get_media_type(message)
                     
                     if media_type:
                         saved_path = await self.save_media(message, media_type)
-                        sender_info = await self.get_user_info(message.sender_id)
                         
                         if self.report_config.report_ttl_media and hasattr(message.media, 'ttl_seconds') and message.media.ttl_seconds:
+                            sender_info = await self.get_user_info(message.sender_id)
+                            
                             if saved_path:
                                 await self.send_report(
-                                    f"⏰ رسانه نابودشونده از {sender_info}",
-                                    saved_path
+                                    f"⏰ رسانه نابودشونده دریافت شد\n"
+                                    f"👤 از: {sender_info}\n"
+                                    f"📦 نوع: {media_type}\n"
+                                    f"⏱️ زمان باقی‌مانده: {message.media.ttl_seconds} ثانیه\n"
+                                    f"💾 ذخیره شده: ✅",
+                                    saved_path,
+                                    f"⏰ {media_type} نابودشونده از {sender_info}"
                                 )
                             else:
                                 await self.send_report(
-                                    f"⏰ رسانه نابودشونده از {sender_info} (ذخیره نشد)"
+                                    f"⏰ رسانه نابودشونده دریافت شد\n"
+                                    f"👤 از: {sender_info}\n"
+                                    f"📦 نوع: {media_type}\n"
+                                    f"⏱️ زمان باقی‌مانده: {message.media.ttl_seconds} ثانیه\n"
+                                    f"💾 ذخیره شده: ❌"
                                 )
                         
                         elif hasattr(message.media, 'noforwards') and message.media.noforwards:
+                            sender_info = await self.get_user_info(message.sender_id)
+                            
                             if saved_path:
                                 await self.send_report(
-                                    f"🚫 رسانه یک‌بارمصرف از {sender_info}",
-                                    saved_path
+                                    f"🚫 رسانه یک‌بارمصرف دریافت شد\n"
+                                    f"👤 از: {sender_info}\n"
+                                    f"📦 نوع: {media_type}\n"
+                                    f"💾 ذخیره شده: ✅",
+                                    saved_path,
+                                    f"🚫 {media_type} یک‌بارمصرف از {sender_info}"
                                 )
                             else:
                                 await self.send_report(
-                                    f"🚫 رسانه یک‌بارمصرف از {sender_info} (ذخیره نشد)"
+                                    f"🚫 رسانه یک‌بارمصرف دریافت شد\n"
+                                    f"👤 از: {sender_info}\n"
+                                    f"📦 نوع: {media_type}\n"
+                                    f"💾 ذخیره شده: ❌"
                                 )
         except Exception as e:
-            logger.error(f"خطا در پردازش گزارش: {e}")
+            logger.error(f"خطا در پردازش گزارش پیام: {e}")
     
     async def handle_edited_message(self, event):
         if isinstance(event.message.peer_id, PeerUser) and not event.message.out:
@@ -2004,13 +2651,19 @@ class SelfBotManager:
                 
                 try:
                     sender_info = await self.get_user_info(sender.id)
-                    await self.send_report(
-                        f"✍️ پیام ویرایش‌شده از {sender_info}\n"
-                        f"متن اصلی:\n{original_text[:500]}\n"
-                        f"متن جدید:\n{new_text[:500]}"
+                    report_text = (
+                        f"✍️ پیام ویرایش‌شده\n"
+                        f"👤 از: {sender_info}\n"
+                        f"🆔 پیام: {message_id}\n"
+                        f"📝 متن اصلی:\n{original_text[:1000]}\n"
+                        f"📝 متن جدید:\n{new_text[:1000]}\n"
+                        f"🕒 زمان: {datetime.now().strftime('%Y/%m/%d %H:%M:%S')}"
                     )
-                except:
-                    pass
+                    
+                    await self.send_report(report_text)
+                    
+                except Exception as e:
+                    logger.error(f"خطا در گزارش ویرایش پیام: {e}")
             
             db.cache_message(self.user_id, event.message.peer_id.user_id, event.message.id, event.message.text or "")
     
@@ -2028,207 +2681,282 @@ class SelfBotManager:
                     file_exists = os.path.exists(media_info['path']) if media_info.get('path') else False
                     
                     report_text = (
-                        f"🗑️ رسانه حذف‌شده از {sender_info}\n"
-                        f"چت: {chat_title}\n"
-                        f"نوع: {media_info['type']}\n"
-                        f"فایل: {'✅' if file_exists else '❌'}"
+                        f"🗑️ رسانه حذف‌شده\n"
+                        f"👤 از: {sender_info}\n"
+                        f"💬 چت: {chat_title}\n"
+                        f"📦 نوع: {media_info['type']}\n"
+                        f"🆔 پیام: {msg_id}\n"
+                        f"📝 کپشن: {media_info.get('caption', 'بدون کپشن')[:200]}\n"
+                        f"💾 فایل ذخیره‌شده: {'✅' if file_exists else '❌'}\n"
+                        f"📏 حجم: {media_info.get('file_size', 0) / 1024:.1f} KB\n"
+                        f"🕒 زمان ارسال: {media_info.get('timestamp', 'نامشخص')}\n"
+                        f"🕒 زمان حذف: {datetime.now().strftime('%Y/%m/%d %H:%M:%S')}"
                     )
                     
                     if file_exists:
-                        await self.send_report(report_text, media_info['path'])
+                        await self.send_report(
+                            report_text,
+                            media_info['path'],
+                            f"🗑️ {media_info['type']} حذف‌شده از {sender_info}"
+                        )
                     else:
                         await self.send_report(report_text)
                     
                     del media_cache[msg_id]
-                except:
-                    pass
-    
-    # ========== متدهای پروفایل ==========
-    
-    async def update_profile_name(self):
-        settings = db.get_selfbot_settings(self.user_id)
-        
-        if settings.get('time_enabled'):
-            now = datetime.now()
-            current_minute = now.minute
+                    
+                except Exception as e:
+                    logger.error(f"خطا در گزارش حذف رسانه {msg_id}: {e}")
+                    if msg_id in media_cache:
+                        del media_cache[msg_id]
             
-            if self.time_font_indices == 'all':
-                font_index = current_minute % len(classic_fonts)
-            elif isinstance(self.time_font_indices, list) and self.time_font_indices:
-                if hasattr(self, 'time_font_cycle'):
-                    self.time_font_cycle = (self.time_font_cycle + 1) % len(self.time_font_indices)
-                else:
-                    self.time_font_cycle = 0
-                font_index = self.time_font_indices[self.time_font_cycle]
-                if font_index >= len(classic_fonts):
-                    font_index = 0
-            else:
-                font_index = 0
-            
-            time_now = now.strftime("%H:%M")
-            time_now_classic = convert_to_classic_font(time_now, font_index)
-            
-            try:
-                current_name = db.get_current_name(self.user_id)
-                if not current_name:
-                    current_name = self.BASE_NAME
-                
-                if settings.get('flag_enabled'):
-                    flag_index = current_minute % len(flags)
-                    flag = flags[flag_index]
-                    new_name = f"『 {flag} 』{current_name} {time_now_classic}"
-                else:
-                    new_name = f"{current_name} | {time_now_classic}"
-                
-                await self.client(UpdateProfileRequest(first_name=new_name))
-            except:
-                pass
+            for (chat_id, cached_msg_id), text in list(message_cache.items()):
+                if cached_msg_id == msg_id:
+                    try:
+                        sender_info = await self.get_user_info(chat_id)
+                        chat_title = await self.get_chat_title(chat_id)
+                        
+                        report_text = (
+                            f"🗑️ پیام متنی حذف‌شده\n"
+                            f"👤 از: {sender_info}\n"
+                            f"💬 چت: {chat_title}\n"
+                            f"🆔 پیام: {msg_id}\n"
+                            f"📝 متن پیام:\n{text[:1000] or 'بدون متن'}\n"
+                            f"🕒 زمان: {datetime.now().strftime('%Y/%m/%d %H:%M:%S')}"
+                        )
+                        
+                        await self.send_report(report_text)
+                        
+                        del message_cache[(chat_id, msg_id)]
+                        
+                    except Exception as e:
+                        logger.error(f"خطا در گزارش حذف پیام: {e}")
+                        if (chat_id, msg_id) in message_cache:
+                            del message_cache[(chat_id, msg_id)]
     
-    async def restore_profile_name(self):
+    def format_status_info(self, settings):
         try:
-            current_name = db.get_current_name(self.user_id)
-            if current_name:
-                await self.client(UpdateProfileRequest(first_name=current_name))
-            else:
-                original_name = db.get_original_name(self.user_id)
-                if original_name:
-                    await self.client(UpdateProfileRequest(first_name=original_name))
-                    db.set_current_name(self.user_id, original_name)
-                    self.BASE_NAME = original_name
+            conn = sqlite3.connect('main_database.db')
+            cursor = conn.cursor()
+            cursor.execute('SELECT COUNT(*) FROM user_memory')
+            user_count = cursor.fetchone()[0]
+            conn.close()
         except:
-            pass
+            user_count = 0
+        
+        pv_enemies = len(db.get_enemies(self.user_id, 'pv'))
+        
+        comment_channels = len(db.get_auto_comments(self.user_id))
+        
+        cached_media = len([m for m in media_cache.values() if m.get('owner_id') == self.user_id])
+        
+        spam_settings = db.get_spam_settings(self.user_id)
+        
+        filter_words = db.get_filter_words(self.user_id)
+        active_filters = len([w for w in filter_words if w['enabled']])
+        
+        spam_messages = len(db.get_enemy_spam_messages(self.user_id))
+        
+        font_info = "همه فونت‌ها" if self.time_font_indices == 'all' else f"فونت‌های {self.time_font_indices}"
+        
+        ai_status = settings.get('ai_status', {})
+        active_ai_pm = "هیچ هوش فعالی در پی‌وی وجود ندارد"
+        if ai_status.get('ai_1_pm'):
+            active_ai_pm = "هوش ۱ (Gemini)"
+        elif ai_status.get('ai_2_pm'):
+            active_ai_pm = "هوش ۲ (Paxsenix API)"
+        elif ai_status.get('ai_3_pm'):
+            active_ai_pm = "هوش ۳ (DeepSeek)"
+        
+        active_ai_group = "هیچ هوش فعالی در گروه وجود ندارد"
+        if ai_status.get('ai_1_group'):
+            active_ai_group = "هوش ۱ (Gemini)"
+        elif ai_status.get('ai_2_group'):
+            active_ai_group = "هوش ۲ (Paxsenix API)"
+        elif ai_status.get('ai_3_group'):
+            active_ai_group = "هوش ۳ (DeepSeek)"
+        
+        filter_status = "فعال" if db.get_filter_enabled(self.user_id) else "غیرفعال"
+        
+        text_style = settings.get('text_style') or "هیچکدام"
+        
+        locked_pvs = db.get_locked_pvs(self.user_id)
+        pv_lock_all = settings.get('pv_lock_all', False)
+        
+        translate_status = []
+        for lang, status in self.translate_mode.items():
+            if status:
+                translate_status.append(lang)
+        translate_text = "، ".join(translate_status) if translate_status else "هیچکدام"
+        
+        selfbot_status = "فعال" if settings.get('selfbot_enabled', 1) else "غیرفعال"
+        
+        return f"""
+وضعیت کامل سلف‌بات
+━━━━━━━━━━━━━━━━━━━━
+🤖 وضعیت سلف‌بات: {selfbot_status}
+🔍 حالت سرچ: {'فعال' if self.search_mode else 'غیرفعال'}
+🕐 تایم روی پروفایل: {'فعال' if settings.get('time_enabled') else 'غیرفعال'}
+🏳️ پرچم در تایم: {'فعال' if settings.get('flag_enabled') else 'غیرفعال'}
+🎨 فونت تایم: {font_info}
+
+🤖 هوش مصنوعی:
+• پی‌وی: {active_ai_pm}
+• گروه: {active_ai_group}
+
+✍️ استایل متن: {text_style}
+
+🔒 قفل پیوی همگانی: {'فعال' if pv_lock_all else 'غیرفعال'}
+🔒 پی‌وی‌های قفل‌شده: {len(locked_pvs)}
+🚫 فیلتر کلمات: {filter_status}
+
+🌐 ترجمه فعال: {translate_text}
+
+📊 آمار:
+• دشمنان پیوی: {pv_enemies}
+• کانال‌های نظر‌دهی: {comment_channels}
+• رسانه‌های ذخیره‌شده: {cached_media}
+• کلمات فیلتر فعال: {active_filters}
+• پیام‌های اسپم ذخیره شده: {spam_messages}
+• کاربران ذخیره شده: {user_count}
+
+🛡️ حفاظت اسپم:
+• وضعیت: {'فعال' if spam_settings.get('spam_protection') else 'غیرفعال'}
+• محدودیت: {spam_settings.get('spam_limit', 10)} پیام در {spam_settings.get('mute_duration', 10)} ثانیه
+
+📊 گروه گزارش: {self.report_config.report_group_id}
+💾 ذخیره خودکار رسانه: {'فعال' if self.report_config.auto_save_media else 'غیرفعال'}
+━━━━━━━━━━━━━━━━━━━━
+✅ Self-Bot v{BOT_VERSION}
+        """
     
-    async def update_profile_task(self):
-        while self.running:
-            try:
-                await self.update_profile_name()
-            except:
-                pass
-            await asyncio.sleep(60)
-    
-    # ========== توابع کمکی ==========
-    
-    async def get_chat_stats(self, chat_id, target_user_id=None):
-        try:
-            stats = {
-                'my_messages': 0,
-                'target_messages': 0,
-                'my_photos': 0,
-                'target_photos': 0,
-                'my_videos': 0,
-                'target_videos': 0,
-                'my_stickers': 0,
-                'target_stickers': 0,
-                'my_gifs': 0,
-                'target_gifs': 0,
-                'my_voices': 0,
-                'target_voices': 0,
-                'my_files': 0,
-                'target_files': 0
-            }
-            
-            if not target_user_id:
-                return None
-            
-            target_user_id = int(target_user_id)
-            
-            limit = 5000
-            async for message in self.client.iter_messages(chat_id, limit=limit):
-                sender_id = message.sender_id
-                if not sender_id:
-                    if hasattr(message, 'from_id') and message.from_id:
-                        if hasattr(message.from_id, 'user_id'):
-                            sender_id = message.from_id.user_id
-                        elif hasattr(message.from_id, 'channel_id'):
-                            sender_id = message.from_id.channel_id
-                        elif hasattr(message.from_id, 'chat_id'):
-                            sender_id = message.from_id.chat_id
-                
-                if not sender_id:
-                    continue
-                
-                sender_id = int(sender_id)
-                
-                if sender_id == self.my_id:
-                    stats['my_messages'] += 1
-                    if message.photo:
-                        stats['my_photos'] += 1
-                    elif message.video:
-                        stats['my_videos'] += 1
-                    elif message.sticker:
-                        stats['my_stickers'] += 1
-                    elif message.gif:
-                        stats['my_gifs'] += 1
-                    elif message.voice:
-                        stats['my_voices'] += 1
-                    elif message.document:
-                        stats['my_files'] += 1
-                
-                elif sender_id == target_user_id:
-                    stats['target_messages'] += 1
-                    if message.photo:
-                        stats['target_photos'] += 1
-                    elif message.video:
-                        stats['target_videos'] += 1
-                    elif message.sticker:
-                        stats['target_stickers'] += 1
-                    elif message.gif:
-                        stats['target_gifs'] += 1
-                    elif message.voice:
-                        stats['target_voices'] += 1
-                    elif message.document:
-                        stats['target_files'] += 1
-            
-            return stats
-        except Exception as e:
-            logger.error(f"خطا در دریافت آمار: {e}")
+    # ========== توابع کمکی جدید ==========
+
+async def get_chat_stats(self, chat_id, target_user_id=None):
+    """دریافت آمار چت برای کاربر خاص"""
+    try:
+        stats = {
+            'my_messages': 0,
+            'target_messages': 0,
+            'my_photos': 0,
+            'target_photos': 0,
+            'my_videos': 0,
+            'target_videos': 0,
+            'my_stickers': 0,
+            'target_stickers': 0,
+            'my_gifs': 0,
+            'target_gifs': 0,
+            'my_voices': 0,
+            'target_voices': 0,
+            'my_files': 0,
+            'target_files': 0
+        }
+        
+        if not target_user_id:
+            logger.error("target_user_id is None")
             return None
-    
-    async def generate_qr_code(self, text_or_photo, is_photo=False):
-        try:
-            if is_photo:
-                photo_path = await self.client.download_media(text_or_photo)
-                if photo_path and os.path.exists(photo_path):
-                    text = f"Image: {os.path.basename(photo_path)}"
-                    os.remove(photo_path)
-                else:
-                    return None, "خطا در دانلود عکس"
+        
+        target_user_id = int(target_user_id)
+        
+        limit = 5000
+        async for message in self.client.iter_messages(chat_id, limit=limit):
+            sender_id = message.sender_id
+            if not sender_id:
+                if hasattr(message, 'from_id') and message.from_id:
+                    if hasattr(message.from_id, 'user_id'):
+                        sender_id = message.from_id.user_id
+                    elif hasattr(message.from_id, 'channel_id'):
+                        sender_id = message.from_id.channel_id
+                    elif hasattr(message.from_id, 'chat_id'):
+                        sender_id = message.from_id.chat_id
+            
+            if not sender_id:
+                continue
+            
+            sender_id = int(sender_id)
+            
+            if sender_id == self.my_id:
+                stats['my_messages'] += 1
+                if message.photo:
+                    stats['my_photos'] += 1
+                elif message.video:
+                    stats['my_videos'] += 1
+                elif message.sticker:
+                    stats['my_stickers'] += 1
+                elif message.gif:
+                    stats['my_gifs'] += 1
+                elif message.voice:
+                    stats['my_voices'] += 1
+                elif message.document:
+                    stats['my_files'] += 1
+            
+            elif sender_id == target_user_id:
+                stats['target_messages'] += 1
+                if message.photo:
+                    stats['target_photos'] += 1
+                elif message.video:
+                    stats['target_videos'] += 1
+                elif message.sticker:
+                    stats['target_stickers'] += 1
+                elif message.gif:
+                    stats['target_gifs'] += 1
+                elif message.voice:
+                    stats['target_voices'] += 1
+                elif message.document:
+                    stats['target_files'] += 1
+        
+        return stats
+    except Exception as e:
+        logger.error(f"خطا در دریافت آمار چت: {e}")
+        return None
+
+async def generate_qr_code(self, text_or_photo, is_photo=False):
+    """تولید کد QR از متن یا عکس"""
+    try:
+        if is_photo:
+            photo_path = await self.client.download_media(text_or_photo)
+            if photo_path and os.path.exists(photo_path):
+                text = f"Image: {os.path.basename(photo_path)}"
+                os.remove(photo_path)
             else:
-                text = text_or_photo
-            
-            if not text:
-                return None, "متن خالی است"
-            
-            qr = qrcode.make(text)
-            qr_path = f"qr_{self.user_id}_{int(time.time())}.png"
-            qr.save(qr_path)
-            
-            return qr_path, text
-        except Exception as e:
-            return None, str(e)
+                return None, "خطا در دانلود عکس"
+        else:
+            text = text_or_photo
+        
+        if not text:
+            return None, "متن خالی است"
+        
+        qr = qrcode.make(text)
+        qr_path = f"qr_{self.user_id}_{int(time.time())}.png"
+        qr.save(qr_path)
+        
+        return qr_path, text
+    except Exception as e:
+        return None, str(e)
+
+async def get_admins(self, chat_id):
+    """دریافت لیست ادمین‌های گروه"""
+    try:
+        admins = []
+        async for user in self.client.iter_participants(
+            chat_id, 
+            filter=ChannelParticipantsAdmins
+        ):
+            admins.append(user)
+        return admins
+    except Exception as e:
+        logger.error(f"خطا در دریافت ادمین‌ها: {e}")
+        return []
+
+async def pin_message(self, chat_id, message_id):
+    """پین کردن پیام"""
+    try:
+        await self.client.pin_message(chat_id, message_id)
+        return True
+    except Exception as e:
+        logger.error(f"خطا در پین کردن پیام: {e}")
+        return False
     
-    async def get_admins(self, chat_id):
-        try:
-            admins = []
-            async for user in self.client.iter_participants(
-                chat_id, 
-                filter=ChannelParticipantsAdmins
-            ):
-                admins.append(user)
-            return admins
-        except Exception as e:
-            logger.error(f"خطا در دریافت ادمین‌ها: {e}")
-            return []
-    
-    async def pin_message(self, chat_id, message_id):
-        try:
-            await self.client.pin_message(chat_id, message_id)
-            return True
-        except Exception as e:
-            logger.error(f"خطا در پین کردن پیام: {e}")
-            return False
-    
-    # ========== هندلر اصلی دستورات ==========
+    # ========== ادامه هندلرهای دستورات ==========
     
     async def handle_commands(self, event):
         if event.sender_id != self.my_id:
@@ -2236,7 +2964,9 @@ class SelfBotManager:
         
         command_text = event.text.strip()
         
-        # سلف روشن / خاموش - همیشه کار می‌کنند
+        # ========== دستورات ویژه (قبل از بررسی وضعیت) ==========
+        
+        # سلف روشن / خاموش
         if command_text == 'سلف روشن':
             db.update_selfbot_setting(self.user_id, 'selfbot_enabled', 1)
             await event.edit("✅ سلف‌بات فعال شد")
@@ -2247,7 +2977,8 @@ class SelfBotManager:
             await event.edit("✅ سلف‌بات غیرفعال شد")
             return
         
-        # بررسی فعال بودن سلف‌بات
+        # ========== بررسی فعال بودن سلف‌بات ==========
+        
         settings = db.get_selfbot_settings(self.user_id)
         
         if not settings.get('selfbot_enabled', 1):
@@ -2263,7 +2994,7 @@ class SelfBotManager:
         elif isinstance(event.message.peer_id, PeerChat):
             chat_id = event.message.peer_id.chat_id
         
-        # ========== دستورات ==========
+        # ========== ادامه سایر دستورات =========
         
         # تگ ادمین‌ها
         if command_text == 'تگ ادمین':
@@ -2283,7 +3014,7 @@ class SelfBotManager:
                 await event.edit("⚠️ ادمینی یافت نشد")
             return
         
-        # پین
+        # پین کردن پیام
         if command_text == 'پین':
             if event.is_reply:
                 reply_msg = await event.get_reply_message()
@@ -2307,25 +3038,26 @@ class SelfBotManager:
                     elif reply_msg.photo:
                         qr_path, text = await self.generate_qr_code(reply_msg.media, is_photo=True)
                     else:
-                        await event.respond("⚠️ روی پیام متنی یا عکس ریپلای کنید")
+                        await event.respond("⚠️ لطفاً روی یک پیام متنی یا عکس ریپلای کنید")
                         return
                 else:
+                    # استفاده از متن خود دستور
                     qr_text = command_text.replace('.کد', '').strip()
                     if qr_text:
                         qr_path, text = await self.generate_qr_code(qr_text)
                     else:
-                        await event.respond("⚠️ متن را مشخص کنید")
+                        await event.respond("⚠️ لطفاً متن یا عکس را مشخص کنید")
                         return
                 
                 if qr_path and os.path.exists(qr_path):
                     await self.client.send_file(
                         chat_id,
                         qr_path,
-                        caption=f"🝰 کد QR\n📝 متن: {text[:100]}"
+                        caption=f"🝰 کد QR\n📝 متن: {text[:100]}{'...' if len(text) > 100 else ''}"
                     )
                     os.remove(qr_path)
                 else:
-                    await event.respond(f"⚠️ خطا: {text}")
+                    await event.respond(f"⚠️ خطا در تولید کد QR: {text}")
                     
             except Exception as e:
                 await event.respond(f"⚠️ خطا: {str(e)[:100]}")
@@ -2344,7 +3076,7 @@ class SelfBotManager:
                 target_user_id = chat_id if isinstance(event.message.peer_id, PeerUser) else None
             
             if not target_user_id:
-                await event.respond("⚠️ روی پیام کاربر ریپلای کنید یا در پی‌وی باشید")
+                await event.respond("⚠️ لطفاً روی پیام کاربر ریپلای کنید یا در پی‌وی از این دستور استفاده کنید")
                 return
             
             stats = await self.get_chat_stats(chat_id, target_user_id)
@@ -2359,6 +3091,7 @@ class SelfBotManager:
                 total_my = stats['my_messages']
                 total_target = stats['target_messages']
                 
+                # تعیین برنده
                 if total_my > total_target:
                     winner = my_name
                 elif total_target > total_my:
@@ -2366,6 +3099,7 @@ class SelfBotManager:
                 else:
                     winner = "مساوی"
                 
+                # نسبت پیام‌ها
                 if total_target > 0:
                     ratio = f"{total_my} به {total_target}"
                 else:
@@ -2395,7 +3129,8 @@ class SelfBotManager:
                 await event.respond(f"⚠️ خطا: {str(e)[:100]}")
             return
         
-        # پنل
+        # ========== دستورات پنل ==========
+        
         if command_text in ['.پنل', 'پنل', '/panel']:
             try:
                 bot_username = BOT_USERNAME.replace('@', '')
@@ -2404,19 +3139,21 @@ class SelfBotManager:
                     await results[0].click(chat_id)
                     await event.delete()
                 else:
-                    await event.edit("❌ پنل یافت نشد")
+                    await event.edit("❌ پنل یافت نشد. لطفاً مطمئن شوید ربات فعال است.")
             except Exception as e:
-                await event.edit(f"❌ خطا: {str(e)[:100]}")
+                await event.edit(f"❌ خطا در باز کردن پنل: {str(e)[:100]}")
             return
         
-        # اهنگ
+        # ========== ادامه دستورات قبلی ==========
+        
+        # دستور اهنگ
         if command_text.startswith('.اهنگ '):
             song_name = command_text[6:].strip()
             if not song_name:
-                await event.edit("❌ نام آهنگ را وارد کنید")
+                await event.edit("❌ لطفاً نام آهنگ را وارد کنید\nمثال: .اهنگ مهدیار احمدی")
                 return
             
-            await event.edit(f"🎵 جستجو: {song_name}...")
+            await event.edit(f"🎵 در حال جستجوی آهنگ: {song_name}...")
             
             try:
                 bot_username = MUSIC_BOT.replace('@', '')
@@ -2425,13 +3162,14 @@ class SelfBotManager:
                 if results and len(results) > 0:
                     await results[0].click(chat_id)
                     await event.delete()
+                    logger.info(f"✅ آهنگ {song_name} ارسال شد")
                 else:
-                    await event.edit(f"❌ '{song_name}' پیدا نشد")
+                    await event.edit(f"❌ آهنگی با نام '{song_name}' پیدا نشد")
             except Exception as e:
-                await event.edit(f"❌ خطا: {str(e)[:100]}")
+                await event.edit(f"❌ خطا در ارسال آهنگ: {str(e)[:100]}")
             return
         
-        # تایم فونت
+        # دستور تنظیم تایم فونت
         if command_text.startswith('تایم ') and not command_text.startswith('تایم روشن') and not command_text.startswith('تایم خاموش') and not command_text.startswith('تایمر'):
             match = re.match(r'^تایم\s+([\d\.]+)$', command_text)
             if match:
@@ -2448,52 +3186,53 @@ class SelfBotManager:
                 if indices:
                     self.time_font_indices = indices
                     db.update_selfbot_setting(self.user_id, 'time_font_indices', ','.join(map(str, indices)))
-                    await event.edit(f"✅ فونت‌های تایم: {indices}")
+                    await event.edit(f"✅ فونت‌های تایم تنظیم شد: {indices}")
                 else:
-                    await event.edit(f"❌ ایندکس نامعتبر (0 تا {len(classic_fonts)-1})")
+                    await event.edit(f"❌ ایندکس نامعتبر. محدوده مجاز: 0 تا {len(classic_fonts)-1}")
                 return
         
-        # فیلتر
+        # دستورات فیلتر
         if command_text.startswith('.فیلتر '):
             word = command_text[8:].strip()
             if word:
                 db.add_filter_word(self.user_id, word)
-                await event.edit(f"✅ {word} اضافه شد")
+                await event.edit(f"✅ کلمه {word} به لیست فیلتر اضافه شد")
             else:
-                await event.edit("❌ کلمه را وارد کنید")
+                await event.edit("❌ لطفاً یک کلمه وارد کنید")
             return
         
         if command_text.startswith('حذف فیلتر '):
             word = command_text[11:].strip()
             if word:
                 db.remove_filter_word(self.user_id, word)
-                await event.edit(f"✅ {word} حذف شد")
+                await event.edit(f"✅ کلمه {word} از لیست فیلتر حذف شد")
             else:
-                await event.edit("❌ کلمه را وارد کنید")
+                await event.edit("❌ لطفاً یک کلمه وارد کنید")
             return
         
         if command_text == 'لیست فیلتر':
             filters = db.get_filter_words(self.user_id)
             if filters:
-                text = "📜 کلمات فیلتر:\n\n"
-                for i, w in enumerate(filters, 1):
-                    text += f"{i}. {w['word']} - {'فعال' if w['enabled'] else 'غیرفعال'}\n"
-                await event.edit(text)
+                message_text = "📜 لیست کلمات فیلتر شده:\n\n"
+                for i, word_info in enumerate(filters, 1):
+                    status = "فعال" if word_info['enabled'] else "غیرفعال"
+                    message_text += f"{i}. {word_info['word']} - {status}\n"
+                await event.edit(message_text)
             else:
-                await event.edit("📭 لیست خالی است")
+                await event.edit("📭 لیست کلمات فیلتر خالی است")
             return
         
         if command_text == 'فیلتر روشن':
             db.set_filter_enabled(self.user_id, True)
-            await event.edit("✅ فیلتر فعال شد")
+            await event.edit("✅ فیلتر کلمات فعال شد")
             return
         
         if command_text == 'فیلتر خاموش':
             db.set_filter_enabled(self.user_id, False)
-            await event.edit("✅ فیلتر غیرفعال شد")
+            await event.edit("✅ فیلتر کلمات غیرفعال شد")
             return
         
-        # قفل رسانه
+        # دستورات قفل رسانه
         lock_commands = {
             'قفل لینک': 'lock_link',
             'قفل عکس': 'lock_photo',
@@ -2520,7 +3259,7 @@ class SelfBotManager:
                     target_id = event.message.peer_id.user_id
                 
                 db.set_user_lock(self.user_id, target_id, lock_type, True)
-                target_name = "همه" if target_id == 0 else f"کاربر {target_id}"
+                target_name = "همه کاربران" if target_id == 0 else f"کاربر {target_id}"
                 await event.edit(f"✅ {cmd} برای {target_name} فعال شد")
                 return
             
@@ -2533,16 +3272,15 @@ class SelfBotManager:
                     target_id = event.message.peer_id.user_id
                 
                 db.set_user_lock(self.user_id, target_id, lock_type, False)
-                target_name = "همه" if target_id == 0 else f"کاربر {target_id}"
+                target_name = "همه کاربران" if target_id == 0 else f"کاربر {target_id}"
                 await event.edit(f"✅ {cmd} برای {target_name} غیرفعال شد")
                 return
         
-        # وضعیت
         if command_text == 'وضعیت':
+            settings = db.get_selfbot_settings(self.user_id)
             await event.edit(self.format_status_info(settings))
             return
         
-        # حذف
         if re.match(r'^حذف\s+(\d+)$', command_text):
             match = re.match(r'^حذف\s+(\d+)$', command_text)
             num = int(match.group(1))
@@ -2554,12 +3292,12 @@ class SelfBotManager:
                 await self.client.delete_messages(event.chat_id, messages)
                 await event.edit(f"✅ {len(messages)} پیام حذف شد")
             else:
-                await event.edit("⚠️ پیامی یافت نشد")
+                await event.edit("⚠️ هیچ پیامی یافت نشد")
             return
         
         # حذف کامل
         if command_text == 'حذف کامل':
-            await event.edit("⏳ در حال حذف...")
+            await event.edit("⏳ در حال حذف پیام‌ها...")
             
             deleted_count = 0
             error_count = 0
@@ -2584,7 +3322,7 @@ class SelfBotManager:
                             except:
                                 error_count += len(batch)
                                 batch = []
-                        except:
+                        except Exception as e:
                             error_count += len(batch)
                             batch = []
                 
@@ -2596,15 +3334,14 @@ class SelfBotManager:
                         error_count += len(batch)
                 
                 if deleted_count > 0:
-                    await event.edit(f"✅ {deleted_count} پیام حذف شد" + (f"\n❌ {error_count} ناموفق" if error_count > 0 else ""))
+                    await event.edit(f"✅ {deleted_count} پیام حذف شدند" + (f"\n❌ {error_count} پیام حذف نشدند" if error_count > 0 else ""))
                 else:
-                    await event.edit("⚠️ پیامی یافت نشد")
+                    await event.edit("⚠️ هیچ پیامی یافت نشد")
                     
             except Exception as e:
                 await event.edit(f"⚠️ خطا: {str(e)[:100]}")
             return
         
-        # پینگ
         if command_text == 'پینگ':
             start = time.time()
             await event.edit("🏓 پینگ: ...")
@@ -2613,7 +3350,7 @@ class SelfBotManager:
             await event.edit(f"🏓 پینگ: {ping} ms")
             return
         
-        # استایل
+        # دستورات استایل
         style_commands = {
             'بولد': 'بولد',
             'زیرخط': 'زیرخط',
@@ -2640,7 +3377,7 @@ class SelfBotManager:
                     await event.edit(f"⚠️ استایل {cmd} فعال نیست")
                 return
         
-        # تایم
+        # تایم روشن/خاموش
         if command_text == 'تایم روشن':
             db.update_selfbot_setting(self.user_id, 'time_enabled', 1)
             db.update_selfbot_setting(self.user_id, 'flag_enabled', 0)
@@ -2648,14 +3385,14 @@ class SelfBotManager:
             await event.delete()
             return
         
-        if command_text == 'تایمر پرچم روشن':
+        if command_text == "تایمر پرچم روشن":
             db.update_selfbot_setting(self.user_id, 'time_enabled', 1)
             db.update_selfbot_setting(self.user_id, 'flag_enabled', 1)
             await self.update_profile_name()
             await event.delete()
             return
         
-        if command_text == 'تایم خاموش':
+        if command_text == "تایم خاموش":
             db.update_selfbot_setting(self.user_id, 'time_enabled', 0)
             db.update_selfbot_setting(self.user_id, 'flag_enabled', 0)
             await self.restore_profile_name()
@@ -2663,97 +3400,72 @@ class SelfBotManager:
             return
         
         # اتوسین
-        if command_text == 'فعال اتوسین':
+        if command_text == "فعال اتوسین":
             db.update_selfbot_setting(self.user_id, 'autosend_mode', 1)
             self.autosend_enabled = True
             await event.edit("✅ اتوسین فعال شد")
             return
         
-        if command_text == 'غیرفعال اتوسین':
+        if command_text == "غیرفعال اتوسین":
             db.update_selfbot_setting(self.user_id, 'autosend_mode', 0)
             self.autosend_enabled = False
             await event.edit("✅ اتوسین غیرفعال شد")
-            return
-        
-        # اسپم
-        if command_text == 'اسپم روشن':
-            db.set_spam_settings(self.user_id, spam_protection=1)
-            await event.edit("✅ حفاظت اسپم فعال شد")
-            return
-        
-        if command_text == 'اسپم خاموش':
-            db.set_spam_settings(self.user_id, spam_protection=0)
-            await event.edit("✅ حفاظت اسپم غیرفعال شد")
-            return
-        
-        if command_text == 'وضعیت اسپم':
-            s = db.get_spam_settings(self.user_id)
-            await event.edit(f"🛡️ حفاظت اسپم:\n🔒 وضعیت: {'فعال' if s.get('spam_protection') else 'غیرفعال'}\n📊 محدودیت: {s.get('spam_limit', 10)} پیام\n⏱️ زمان: {s.get('mute_duration', 10)} ثانیه")
-            return
-        
-        if command_text.startswith('تنظیم اسپم '):
-            try:
-                parts = command_text.split()
-                if len(parts) == 3:
-                    db.set_spam_settings(self.user_id, spam_limit=int(parts[1]), mute_duration=int(parts[2]))
-                    await event.edit(f"✅ تنظیم شد: {parts[1]} پیام در {parts[2]} ثانیه")
-                else:
-                    await event.edit("⚠️ فرمت: تنظیم اسپم [تعداد] [زمان]")
-            except:
-                await event.edit("⚠️ اعداد معتبر وارد کنید")
             return
         
         # انیمیشن‌ها
         if command_text == 'قلب پیشرفته':
             await event.delete()
             try:
-                msg = await self.client.send_message(event.chat_id, "❤️")
+                msg = await self.client.send_message(event.chat_id, "❤️ شروع...")
                 await advanced_heart_animation(msg)
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"خطا: {e}")
             return
         
         if command_text == 'عشق':
             await event.delete()
             try:
-                msg = await event.respond("💝")
+                msg = await event.respond("💝 شروع...")
                 await advanced_heart_animation(msg)
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"خطا: {e}")
             return
         
         if command_text == 'سنتت':
             await event.delete()
             try:
-                msg = await event.respond("🕯️")
+                msg = await event.respond("🕯️ در حال اجرا...")
                 for i in range(101):
-                    bar = "█" * int(i / 100 * 20) + "░" * (20 - int(i / 100 * 20))
+                    bar_len = int(i / 100 * 20)
+                    bar = "█" * bar_len + "░" * (20 - bar_len)
                     await msg.edit(f"🕯️ {i}% [{bar}]")
                     await asyncio.sleep(0.03)
                 await asyncio.sleep(1)
                 await msg.edit("✅ انجام شد 🥴")
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"خطا: {e}")
             return
         
         if command_text == 'هک':
             await event.delete()
             try:
-                msg = await event.respond("🔍")
-                steps = [
-                    "User online: True\nTelegram access: True\nRead Storage: True",
-                    "Hacking... 0%\n[░░░░░░░░░░░░░░░░░░░░]",
-                    "Hacking... 25%\n[█████░░░░░░░░░░░░░░░]",
-                    "Hacking... 50%\n[██████████░░░░░░░░░░]",
-                    "Hacking... 75%\n[███████████████░░░░░]",
-                    "Hacking... 100%\n[████████████████████]",
-                    "✅ هک کامل شد"
-                ]
-                for step in steps:
-                    await asyncio.sleep(2)
-                    await msg.edit(step)
-            except:
-                pass
+                msg = await event.respond("🔍 در حال هک...")
+                await asyncio.sleep(2)
+                await msg.edit("User online: True\nTelegram access: True\nRead Storage: True")
+                await asyncio.sleep(2)
+                await msg.edit("Hacking... 0%\n[░░░░░░░░░░░░░░░░░░░░]")
+                await asyncio.sleep(2)
+                await msg.edit("Hacking... 25%\n[█████░░░░░░░░░░░░░░░]")
+                await asyncio.sleep(2)
+                await msg.edit("Hacking... 50%\n[██████████░░░░░░░░░░]")
+                await asyncio.sleep(2)
+                await msg.edit("Hacking... 75%\n[███████████████░░░░░]")
+                await asyncio.sleep(2)
+                await msg.edit("Hacking... 100%\n[████████████████████]")
+                await asyncio.sleep(2)
+                await msg.edit("✅ هک کامل شد")
+            except Exception as e:
+                logger.error(f"خطا: {e}")
             return
         
         if command_text == 'شروع':
@@ -2762,17 +3474,6 @@ class SelfBotManager:
                 await event.respond("🌟 سلف‌بات شروع شد")
             except:
                 pass
-            return
-        
-        if command_text == 'قلب':
-            await event.delete()
-            await self.heart_animation(event.chat_id)
-            return
-        
-        if command_text == 'ماه':
-            await event.delete()
-            await self.moon_animation(event.chat_id)
-            return
         
         # لیست دشمن
         if command_text == 'لیست دشمن':
@@ -2801,16 +3502,16 @@ class SelfBotManager:
             return
         
         # تغییر نام و بیو
-        if re.match(r'^تغییر اسم\s+(.+)$', command_text):
+        if re.match(r'^تغییر اسم\s+(.+)$', event.text):
             await self.handle_change_name_command(event)
             return
         
-        if re.match(r'^تغییر بیو\s+(.+)$', command_text):
+        if re.match(r'^تغییر بیو\s+(.+)$', event.text):
             await self.handle_change_bio_command(event)
             return
         
         # کامنت
-        if re.match(r'^کامنت\s+(.+)$', command_text):
+        if re.match(r'^کامنت\s+(.+)$', event.text):
             await self.handle_comment_command(event)
             return
         
@@ -2845,40 +3546,51 @@ class SelfBotManager:
             await self.handle_lock_pv_command(event, 'unlock')
             return
         
-        if command_text == 'قفل پیوی همه':
+        if command_text == "قفل پیوی همه":
             await self.handle_lock_all_pv_command(event, True)
             return
         
-        if command_text == 'باز پی همه':
+        if command_text == "باز پی همه":
             await self.handle_lock_all_pv_command(event, False)
             return
         
+        # قلب و ماه
+        if command_text == "قلب":
+            await event.delete()
+            await self.heart_animation(event.chat_id)
+            return
+        
+        if command_text == "ماه":
+            await event.delete()
+            await self.moon_animation(event.chat_id)
+            return
+        
         # اطلاعات
-        if command_text == 'اطلاعات':
+        if command_text == "اطلاعات":
             await self.handle_info_command(event)
             return
         
-        if command_text == 'دانلود پروفایل':
+        if command_text == "دانلود پروفایل":
             await self.handle_download_profile_command(event)
             return
         
-        if command_text == 'ست پروف':
+        if command_text == "ست پروف":
             await self.handle_set_profile_command(event, 'photo')
             return
         
-        if command_text == 'ست بیو':
+        if command_text == "ست بیو":
             await self.handle_set_profile_command(event, 'bio')
             return
         
-        if command_text == 'حذف ست پروف':
+        if command_text == "حذف ست پروف":
             await self.handle_delete_profile_command(event, 'photo')
             return
         
-        if command_text == 'حذف ست بیو':
+        if command_text == "حذف ست بیو":
             await self.handle_delete_profile_command(event, 'bio')
             return
         
-        if command_text == 'تاریخ کامل':
+        if command_text == "تاریخ کامل":
             await self.handle_full_date_command(event)
             return
         
@@ -2887,7 +3599,7 @@ class SelfBotManager:
             await self.handle_spam_command(event)
             return
         
-        if command_text == 'بلاک':
+        if command_text == "بلاک":
             await self.handle_block_command(event)
             return
         
@@ -2896,7 +3608,7 @@ class SelfBotManager:
             await self.handle_reaction_command(event, 'set')
             return
         
-        if command_text == 'حذف ریکت':
+        if command_text == "حذف ریکت":
             await self.handle_reaction_command(event, 'remove')
             return
         
@@ -2915,11 +3627,11 @@ class SelfBotManager:
             return
         
         # گزارش
-        if command_text == 'تنظیم گزارش':
+        if command_text == "تنظیم گزارش":
             await self.handle_report_group_command(event, 'set')
             return
         
-        if command_text == 'گروه گزارش':
+        if command_text == "گروه گزارش":
             await self.handle_report_group_command(event, 'get')
             return
         
@@ -2932,232 +3644,342 @@ class SelfBotManager:
             await self.handle_exit_search_command(event)
             return
         
-        # اگر هیچ دستوری نبود
+        # ========== اگر هیچ دستوری شناسایی نشد ==========
+        # هیچ کاری نکن (خطا نده)
         return
     
-    # ========== توابع کمکی دستورات ==========
-    
-    def format_status_info(self, settings):
-        try:
-            conn = sqlite3.connect('main_database.db')
-            cursor = conn.cursor()
-            cursor.execute('SELECT COUNT(*) FROM user_memory')
-            user_count = cursor.fetchone()[0]
-            conn.close()
-        except:
-            user_count = 0
-        
-        pv_enemies = len(db.get_enemies(self.user_id))
-        comment_channels = len(db.get_auto_comments(self.user_id))
-        cached_media = len([m for m in media_cache.values() if m.get('owner_id') == self.user_id])
-        spam_settings = db.get_spam_settings(self.user_id)
-        filter_words = db.get_filter_words(self.user_id)
-        active_filters = len([w for w in filter_words if w['enabled']])
-        spam_messages = len(db.get_enemy_spam_messages(self.user_id))
-        font_info = "همه" if self.time_font_indices == 'all' else f"فونت‌های {self.time_font_indices}"
-        
-        ai_status = settings.get('ai_status', {})
-        active_ai_pm = "هیچ"
-        if ai_status.get('ai_1_pm'):
-            active_ai_pm = "هوش ۱ (Gemini)"
-        elif ai_status.get('ai_2_pm'):
-            active_ai_pm = "هوش ۲ (Paxsenix)"
-        elif ai_status.get('ai_3_pm'):
-            active_ai_pm = "هوش ۳ (DeepSeek)"
-        
-        active_ai_group = "هیچ"
-        if ai_status.get('ai_1_group'):
-            active_ai_group = "هوش ۱ (Gemini)"
-        elif ai_status.get('ai_2_group'):
-            active_ai_group = "هوش ۲ (Paxsenix)"
-        elif ai_status.get('ai_3_group'):
-            active_ai_group = "هوش ۳ (DeepSeek)"
-        
-        return f"""
-🤖 وضعیت سلف‌بات
-━━━━━━━━━━━━━━━━━━━━
-🕐 تایم: {'فعال' if settings.get('time_enabled') else 'غیرفعال'}
-🏳️ پرچم: {'فعال' if settings.get('flag_enabled') else 'غیرفعال'}
-🎨 فونت: {font_info}
-✍️ استایل: {settings.get('text_style') or 'هیچ'}
-
-🤖 هوش مصنوعی:
-• پی‌وی: {active_ai_pm}
-• گروه: {active_ai_group}
-
-🔒 قفل پیوی همگانی: {'فعال' if settings.get('pv_lock_all') else 'غیرفعال'}
-🔒 پی‌وی قفل‌شده: {len(db.get_locked_pvs(self.user_id))}
-🚫 فیلتر: {'فعال' if db.get_filter_enabled(self.user_id) else 'غیرفعال'}
-
-📊 آمار:
-• دشمنان: {pv_enemies}
-• کانال‌ها: {comment_channels}
-• رسانه‌ها: {cached_media}
-• فیلتر فعال: {active_filters}
-• اسپم‌ها: {spam_messages}
-• کاربران: {user_count}
-
-🛡️ حفاظت اسپم:
-• وضعیت: {'فعال' if spam_settings.get('spam_protection') else 'غیرفعال'}
-• محدودیت: {spam_settings.get('spam_limit', 10)} پیام در {spam_settings.get('mute_duration', 10)} ثانیه
-━━━━━━━━━━━━━━━━━━━━
-✅ Self-Bot v{BOT_VERSION}
-        """
+    # ========== توابع کمکی برای دستورات ==========
     
     async def handle_list_enemies_command(self, event):
-        enemies = db.get_enemies(self.user_id)
-        if enemies:
-            text = "📋 لیست دشمنان:\n\n"
-            for i, enemy_id in enumerate(enemies, 1):
-                try:
-                    enemy = await self.client.get_entity(enemy_id)
-                    text += f"{i}. {enemy.first_name or 'کاربر'} ({enemy_id})\n"
-                except:
-                    text += f"{i}. کاربر {enemy_id}\n"
-            await event.edit(text)
-        else:
-            await event.edit("📭 لیست خالی است")
+        try:
+            enemies = db.get_enemies(self.user_id, 'pv')
+            
+            if enemies:
+                message = "📋 لیست دشمنان:\n\n"
+                for i, enemy_id in enumerate(enemies, 1):
+                    try:
+                        enemy = await self.client.get_entity(enemy_id)
+                        enemy_name = enemy.first_name or f"کاربر {enemy_id}"
+                        message += f"{i}. {enemy_name} ({enemy_id})\n"
+                    except:
+                        message += f"{i}. کاربر {enemy_id}\n"
+                
+                await event.edit(message)
+            else:
+                await event.edit("📭 لیست دشمنان خالی است")
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_list_spam_command(self, event):
-        spam_messages = db.get_enemy_spam_messages(self.user_id)
-        if spam_messages:
-            text = "📜 پیام‌های اسپم:\n\n"
-            for i, msg in enumerate(spam_messages, 1):
-                text += f"{i}. {msg['text']}\n"
-            text += f"\n📊 تعداد: {len(spam_messages)}"
-            await event.edit(text)
-        else:
-            await event.edit("📭 لیست خالی است")
+        try:
+            spam_messages = db.get_enemy_spam_messages(self.user_id)
+            
+            if spam_messages:
+                message = "📜 لیست پیام‌های اسپم:\n\n"
+                for i, spam_msg in enumerate(spam_messages, 1):
+                    message += f"{i}. {spam_msg['text']}\n"
+                
+                message += f"\n📊 تعداد: {len(spam_messages)}\n"
+                message += "🗑️ حذف اسپم [شماره]\n"
+                message += "🧹 پاک کردن اسپم"
+                
+                if len(message) > 4000:
+                    chunks = [message[i:i+4000] for i in range(0, len(message), 4000)]
+                    for i, chunk in enumerate(chunks):
+                        if i == 0:
+                            await event.edit(chunk)
+                        else:
+                            await event.respond(chunk)
+                else:
+                    await event.edit(message)
+            else:
+                await event.edit("📭 لیست پیام‌های اسپم خالی است")
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_clear_spam_command(self, event):
-        db.clear_enemy_spam_messages(self.user_id)
-        await event.edit("✅ اسپم‌ها پاک شدند")
+        try:
+            db.clear_enemy_spam_messages(self.user_id)
+            await event.edit("✅ لیست پیام‌های اسپم پاک شد")
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_delete_spam_command(self, event):
-        match = re.match(r'^حذف اسپم\s+(\d+)$', event.text.lower())
-        message_id = int(match.group(1))
-        spam_messages = db.get_enemy_spam_messages(self.user_id)
-        if 1 <= message_id <= len(spam_messages):
-            db.delete_enemy_spam_message(self.user_id, spam_messages[message_id - 1]['id'])
-            await event.edit(f"✅ پیام شماره {message_id} حذف شد")
-        else:
-            await event.edit(f"⚠️ پیام {message_id} وجود ندارد")
+        try:
+            match = re.match(r'^حذف اسپم\s+(\d+)$', event.text.lower())
+            message_id = int(match.group(1))
+            
+            spam_messages = db.get_enemy_spam_messages(self.user_id)
+            
+            if 1 <= message_id <= len(spam_messages):
+                spam_msg = spam_messages[message_id - 1]
+                db.delete_enemy_spam_message(self.user_id, spam_msg['id'])
+                await event.edit(f"✅ پیام شماره {message_id} حذف شد")
+            else:
+                await event.edit(f"⚠️ پیام شماره {message_id} وجود ندارد")
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_add_spam_command(self, event):
-        self.adding_spam = True
-        await event.edit("📝 حالت اضافه کردن اسپم فعال شد\nبرای پایان: اتمام اسپم")
+        try:
+            self.adding_spam = True
+            await event.edit("📝 حالت اضافه کردن اسپم فعال شد\nبرای پایان: اتمام اسپم")
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_end_spam_command(self, event):
-        self.adding_spam = False
-        await event.edit("✅ حالت اضافه کردن اسپم غیرفعال شد")
+        try:
+            self.adding_spam = False
+            await event.edit("✅ حالت اضافه کردن اسپم غیرفعال شد")
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_change_name_command(self, event):
-        match = re.match(r'^تغییر اسم\s+(.+)$', event.text)
-        new_name = match.group(1)
-        db.set_current_name(self.user_id, new_name)
-        await self.client(UpdateProfileRequest(first_name=new_name))
-        self.BASE_NAME = new_name
-        await event.edit(f"✅ نام به {new_name} تغییر کرد")
+        try:
+            match = re.match(r'^تغییر اسم\s+(.+)$', event.text)
+            new_name = match.group(1)
+            
+            current_name = db.get_current_name(self.user_id)
+            if not current_name:
+                db.set_current_name(self.user_id, self.BASE_NAME)
+                current_name = self.BASE_NAME
+            
+            db.set_current_name(self.user_id, new_name)
+            
+            await self.client(UpdateProfileRequest(first_name=new_name))
+            
+            settings = db.get_selfbot_settings(self.user_id)
+            if settings.get('time_enabled'):
+                self.BASE_NAME = new_name
+                await self.update_profile_name()
+            else:
+                self.BASE_NAME = new_name
+            
+            await event.edit(f"✅ نام به {new_name} تغییر کرد")
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_change_bio_command(self, event):
-        match = re.match(r'^تغییر بیو\s+(.+)$', event.text)
-        new_bio = match.group(1)
-        await self.client(UpdateProfileRequest(about=new_bio))
-        await event.edit(f"✅ بیو به {new_bio} تغییر کرد")
+        try:
+            match = re.match(r'^تغییر بیو\s+(.+)$', event.text)
+            new_bio = match.group(1)
+            
+            await self.client(UpdateProfileRequest(about=new_bio))
+            
+            await event.edit(f"✅ بیو به {new_bio} تغییر کرد")
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_comment_command(self, event):
-        comment_text = event.text[7:].strip()
-        chat = await event.get_chat()
-        chat_type = "کانال" if hasattr(chat, 'broadcast') and chat.broadcast else "گروه"
-        db.set_auto_comment(
-            self.user_id,
-            chat.id,
-            comment_text,
-            chat.title,
-            chat_type,
-            getattr(chat, 'username', None)
-        )
-        await event.edit(f"✅ کامنت در {chat_type} تنظیم شد")
+        try:
+            comment_text = event.text[7:].strip()
+            
+            chat = await event.get_chat()
+            
+            chat_type = "کانال" if hasattr(chat, 'broadcast') and chat.broadcast else "گروه"
+            
+            db.set_auto_comment(
+                self.user_id,
+                chat.id,
+                comment_text,
+                chat.title,
+                chat_type,
+                getattr(chat, 'username', None)
+            )
+            
+            logger.info(f"✅ کامنت در {chat_type}: {chat.title}")
+            
+            try:
+                await event.edit(comment_text)
+            except:
+                pass
+                
+        except Exception as e:
+            logger.error(f"❌ خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_channels_command(self, event):
-        auto_comments = db.get_auto_comments(self.user_id)
-        if auto_comments:
-            text = "📊 کانال‌ها:\n\n"
-            for comment in auto_comments:
-                text += f"• {comment['channel_title']} ({comment['channel_type']})\n"
-                text += f"  متن: {comment['comment_text'][:30]}...\n\n"
-            await event.edit(text)
-        else:
-            await event.edit("📭 هیچ کانالی تنظیم نشده")
+        try:
+            auto_comments = db.get_auto_comments(self.user_id)
+            
+            if auto_comments:
+                msg = "📊 کانال‌های تنظیم شده:\n\n"
+                for comment in auto_comments:
+                    msg += f"• {comment['channel_title']} ({comment['channel_type']})\n"
+                    msg += f"  آیدی: {comment['channel_id']}\n"
+                    msg += f"  متن: {comment['comment_text'][:30]}...\n\n"
+            else:
+                msg = "📭 هیچ کانالی تنظیم نشده"
+            
+            await event.edit(msg)
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_delete_channel_command(self, event):
-        chat = await event.get_chat()
-        auto_comment = db.get_auto_comment(self.user_id, chat.id)
-        if auto_comment:
-            db.remove_auto_comment(self.user_id, chat.id)
-            await event.edit(f"✅ {auto_comment['channel_title']} حذف شد")
-        else:
-            await event.edit("⚠️ این کانال تنظیم نشده")
+        try:
+            chat = await event.get_chat()
+            channel_id = chat.id
+            
+            auto_comment = db.get_auto_comment(self.user_id, channel_id)
+            
+            if auto_comment:
+                db.remove_auto_comment(self.user_id, channel_id)
+                await event.edit(f"✅ تنظیمات {auto_comment['channel_title']} حذف شد")
+            else:
+                await event.edit("⚠️ این کانال تنظیم نشده است")
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_test_channel_command(self, event):
-        if event.is_reply:
-            reply_msg = await event.get_reply_message()
-            chat = await reply_msg.get_chat()
-        else:
-            chat = await event.get_chat()
-        
-        info = f"🔍 اطلاعات تست:\n\n"
-        info += f"چت: {chat.title}\n"
-        info += f"نوع: {'کانال' if hasattr(chat, 'broadcast') and chat.broadcast else 'گروه'}\n"
-        info += f"آیدی: {chat.id}\n"
-        auto_comment = db.get_auto_comment(self.user_id, chat.id)
-        info += f"تنظیم شده: {'✅' if auto_comment else '❌'}\n"
-        await event.edit(info)
+        try:
+            if event.is_reply:
+                reply_msg = await event.get_reply_message()
+                chat = await reply_msg.get_chat()
+                msg = reply_msg
+            else:
+                chat = await event.get_chat()
+                msg = event.message
+            
+            info = f"🔍 اطلاعات تست:\n\n"
+            info += f"چت: {chat.title}\n"
+            info += f"نوع: {'کانال' if hasattr(chat, 'broadcast') and chat.broadcast else 'گروه'}\n"
+            info += f"آیدی: {chat.id}\n"
+            
+            auto_comment = db.get_auto_comment(self.user_id, chat.id)
+            info += f"تنظیم شده: {'✅' if auto_comment else '❌'}\n"
+            
+            if auto_comment:
+                info += f"متن: {auto_comment['comment_text'][:50]}...\n"
+            
+            info += f"\n📨 اطلاعات پیام:\n"
+            info += f"پست کانال: {is_channel_post(msg)}\n"
+            
+            await event.edit(info)
+                
+        except Exception as e:
+            logger.error(f"⚠️ خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_enemy_command(self, event, action):
-        target_id = await get_target_user(event, self.client)
-        if not target_id and isinstance(event.message.peer_id, PeerUser):
-            target_id = event.message.peer_id.user_id
-        
-        if target_id:
-            if action == 'add':
-                db.add_enemy(self.user_id, target_id)
-                await event.edit("✅ دشمن اضافه شد")
-                await self.spam_enemy(target_id)
+        try:
+            target_id = await get_target_user(event, self.client)
+            
+            if not target_id and isinstance(event.message.peer_id, PeerUser):
+                target_id = event.message.peer_id.user_id
+            
+            if target_id:
+                if action == 'add':
+                    db.add_enemy(self.user_id, target_id, 'pv')
+                    await event.edit(f"✅ دشمن اضافه شد")
+                    await self.spam_enemy(target_id)
+                else:
+                    db.remove_enemy(self.user_id, target_id, 'pv')
+                    await event.edit(f"✅ دوست حذف شد")
+                    
+                    if target_id in self.spam_tasks:
+                        self.spam_tasks[target_id].cancel()
+                        del self.spam_tasks[target_id]
             else:
-                db.remove_enemy(self.user_id, target_id)
-                await event.edit("✅ دوست حذف شد")
-                if target_id in self.spam_tasks:
-                    self.spam_tasks[target_id].cancel()
-                    del self.spam_tasks[target_id]
-        else:
-            await event.edit("⚠️ کاربر مشخص نشد")
+                await event.edit("⚠️ کاربر هدف مشخص نشد")
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_lock_pv_command(self, event, action):
-        target_id = await get_target_user(event, self.client)
-        if not target_id and isinstance(event.message.peer_id, PeerUser):
-            target_id = event.message.peer_id.user_id
-        
-        if target_id:
-            if action == 'lock':
-                db.add_locked_pv(self.user_id, target_id)
-                await event.edit(f"✅ قفل پیوی برای {target_id} فعال شد")
+        try:
+            target_id = await get_target_user(event, self.client)
+            
+            if not target_id and isinstance(event.message.peer_id, PeerUser):
+                target_id = event.message.peer_id.user_id
+            
+            if target_id:
+                if action == 'lock':
+                    db.add_locked_pv(self.user_id, target_id)
+                    await event.edit(f"✅ قفل پیوی برای کاربر {target_id} فعال شد")
+                else:
+                    db.remove_locked_pv(self.user_id, target_id)
+                    await event.edit(f"✅ قفل پیوی برای کاربر {target_id} غیرفعال شد")
             else:
-                db.remove_locked_pv(self.user_id, target_id)
-                await event.edit(f"✅ قفل پیوی برای {target_id} غیرفعال شد")
-        else:
-            await event.edit("⚠️ کاربر مشخص نشد")
+                await event.edit("⚠️ کاربر هدف مشخص نشد")
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_lock_all_pv_command(self, event, lock):
-        db.update_selfbot_setting(self.user_id, 'pv_lock_all', 1 if lock else 0)
-        await event.edit("✅ قفل پیوی همگانی " + ("فعال" if lock else "غیرفعال") + " شد")
+        try:
+            db.update_selfbot_setting(self.user_id, 'pv_lock_all', 1 if lock else 0)
+            
+            if lock:
+                await event.edit("✅ قفل پیوی همگانی فعال شد")
+            else:
+                await event.edit("✅ قفل پیوی همگانی غیرفعال شد")
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def heart_animation(self, chat_id):
         try:
             message = await self.client.send_message(chat_id, HEARTS[0])
-            for i in range(1, 99999):
+            for i in range(1, len(HEARTS) * 99999):
                 await asyncio.sleep(4)
                 await self.client.edit_message(chat_id, message, HEARTS[i % len(HEARTS)])
+            
+            settings = db.get_selfbot_settings(self.user_id)
             if chat_id != abs(self.report_config.report_group_id):
                 await self.client.delete_messages(chat_id, message)
         except:
@@ -3166,286 +3988,390 @@ class SelfBotManager:
     async def moon_animation(self, chat_id):
         try:
             message = await self.client.send_message(chat_id, MOONS[0])
-            for i in range(1, 99999):
+            for i in range(1, len(MOONS) * 1):
                 await asyncio.sleep(3)
                 await self.client.edit_message(chat_id, message, MOONS[i % len(MOONS)])
+            
+            settings = db.get_selfbot_settings(self.user_id)
             if chat_id != abs(self.report_config.report_group_id):
                 await self.client.delete_messages(chat_id, message)
         except:
             pass
     
     async def handle_info_command(self, event):
-        if event.is_reply:
-            reply_message = await event.get_reply_message()
-            user = await reply_message.get_sender()
-        else:
-            user = await self.client.get_me()
-        
-        username = f"@{user.username}" if user.username else "ندارد"
-        name = f"{user.first_name or ''} {user.last_name or ''}".strip() or "ندارد"
-        
         try:
-            full_user = await self.client(GetFullUserRequest(user.id))
-            bio = full_user.full_user.about or "ندارد"
-        except:
-            bio = "ندارد"
-        
-        info_text = f"📋 اطلاعات کاربر:\n\n"
-        info_text += f"👤 یوزرنیم: {username}\n"
-        info_text += f"🆔 ID: {user.id}\n"
-        info_text += f"📛 نام: {name}\n"
-        info_text += f"📝 بیو: {bio}\n"
-        
-        await event.edit(info_text)
-        await event.delete()
+            if event.is_reply:
+                reply_message = await event.get_reply_message()
+                user = await reply_message.get_sender()
+            else:
+                user = await self.client.get_me()
+            
+            username = f"@{user.username}" if user.username else "ندارد"
+            name = f"{user.first_name or ''} {user.last_name or ''}".strip() or "ندارد"
+            
+            try:
+                full_user = await self.client(GetFullUserRequest(user.id))
+                bio = full_user.full_user.about or "ندارد"
+            except:
+                bio = "ندارد"
+            
+            user_id = user.id
+            
+            try:
+                photos = await self.client(GetUserPhotosRequest(user_id=user.id, offset=0, max_id=0, limit=1))
+                photo_count = len(photos.photos) if photos.photos else 0
+            except:
+                photo_count = 0
+            
+            info_text = f"📋 اطلاعات کاربر:\n\n"
+            info_text += f"👤 یوزرنیم: {username}\n"
+            info_text += f"🆔 ID: {user_id}\n"
+            info_text += f"📛 نام: {name}\n"
+            info_text += f"📝 بیو: {bio}\n"
+            info_text += f"📸 تعداد عکس: {photo_count}"
+            
+            if user.photo:
+                try:
+                    photo = await self.client.download_profile_photo(user, file=f"{MEDIA_FOLDER}/profile_{user_id}.jpg")
+                    if photo:
+                        await self.client.send_file(event.chat_id, photo, caption=info_text)
+                        if os.path.exists(photo):
+                            os.remove(photo)
+                    else:
+                        await event.edit(info_text + "\n\n📸 خطا در دانلود")
+                except:
+                    await event.edit(info_text + "\n\n📸 خطا در دانلود")
+            else:
+                await event.edit(info_text + "\n\n📸 عکس پروفایل ندارد")
+            
+            await event.delete()
+            
+        except Exception as e:
+            logger.error(f"خطا: {str(e)}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_download_profile_command(self, event):
-        if event.is_reply:
-            reply_message = await event.get_reply_message()
-            user = await reply_message.get_sender()
-        else:
-            user = await self.client.get_me()
-        
-        user_id = user.id
-        user_name = user.first_name or user.username or "کاربر"
-        
-        if user.photo:
+        try:
+            if event.is_reply:
+                reply_message = await event.get_reply_message()
+                user = await reply_message.get_sender()
+            else:
+                user = await self.client.get_me()
+            
+            user_id = user.id
+            user_name = user.first_name or user.username or "کاربر"
+            
+            if user.photo:
+                try:
+                    photo = await self.client.download_profile_photo(user, file=f"{MEDIA_FOLDER}/profile_{user_id}.jpg")
+                    if photo and os.path.exists(photo):
+                        await self.client.send_file(event.chat_id, photo, caption=f"📸 پروفایل {user_name}")
+                        os.remove(photo)
+                    else:
+                        await event.edit(f"⚠️ خطا در دانلود")
+                except:
+                    await event.edit(f"⚠️ خطا در دانلود")
+            else:
+                await event.edit(f"⚠️ عکس پروفایلی وجود ندارد")
+            
+            await event.delete()
+            
+        except Exception as e:
+            logger.error(f"خطا: {e}")
             try:
-                photo = await self.client.download_profile_photo(user, file=f"{MEDIA_FOLDER}/profile_{user_id}.jpg")
-                if photo and os.path.exists(photo):
-                    await self.client.send_file(event.chat_id, photo, caption=f"📸 پروفایل {user_name}")
-                    os.remove(photo)
-                else:
-                    await event.edit("⚠️ خطا در دانلود")
+                await event.delete()
             except:
-                await event.edit("⚠️ خطا در دانلود")
-        else:
-            await event.edit("⚠️ عکس پروفایلی وجود ندارد")
-        
-        await event.delete()
+                pass
     
     async def handle_set_profile_command(self, event, type_):
-        if event.is_reply:
-            reply_message = await event.get_reply_message()
-            user = await reply_message.get_sender()
-            
-            if type_ == 'photo':
-                if user.photo:
-                    photo_path = await self.client.download_profile_photo(user, file=f"{MEDIA_FOLDER}/profile_{user.id}.jpg")
-                    if photo_path and os.path.exists(photo_path):
-                        try:
-                            me = await self.client.get_me()
-                            if me.photo:
-                                photos = await self.client.get_profile_photos(me.id, limit=1)
-                                if photos:
-                                    await self.client(DeletePhotosRequest(id=[photos[0]]))
-                            
-                            file = await self.client.upload_file(photo_path)
-                            await self.client(UploadProfilePhotoRequest(file=file))
-                            await event.edit("✅ عکس پروفایل ست شد")
-                            os.remove(photo_path)
-                        except:
-                            await event.edit("⚠️ خطا")
+        try:
+            if event.is_reply:
+                reply_message = await event.get_reply_message()
+                user = await reply_message.get_sender()
+                
+                if type_ == 'photo':
+                    if user.photo:
+                        photo_path = await self.client.download_profile_photo(user, file=f"{MEDIA_FOLDER}/profile_{user.id}.jpg")
+                        if photo_path and os.path.exists(photo_path):
+                            try:
+                                me = await self.client.get_me()
+                                if me.photo:
+                                    photos = await self.client.get_profile_photos(me.id, limit=1)
+                                    if photos:
+                                        await self.client(DeletePhotosRequest(id=[photos[0]]))
+                                
+                                file = await self.client.upload_file(photo_path)
+                                await self.client(UploadProfilePhotoRequest(file=file))
+                                await event.edit("✅ عکس پروفایل ست شد")
+                                os.remove(photo_path)
+                            except FloodWaitError as e:
+                                await event.edit(f"⚠️ {e.seconds} ثانیه صبر کنید")
+                            except:
+                                await event.edit("⚠️ خطا")
+                        else:
+                            await event.edit("⚠️ خطا در دانلود")
                     else:
-                        await event.edit("⚠️ خطا در دانلود")
+                        await event.edit("⚠️ این کاربر عکس پروفایل ندارد")
                 else:
-                    await event.edit("⚠️ این کاربر عکس پروفایل ندارد")
+                    try:
+                        full_user = await self.client(GetFullUserRequest(user.id))
+                        bio = full_user.full_user.about or ""
+                        await self.client(UpdateProfileRequest(about=bio))
+                        await event.edit("✅ بیو ست شد")
+                    except:
+                        await event.edit("⚠️ خطا")
             else:
-                try:
-                    full_user = await self.client(GetFullUserRequest(user.id))
-                    bio = full_user.full_user.about or ""
-                    await self.client(UpdateProfileRequest(about=bio))
-                    await event.edit("✅ بیو ست شد")
-                except:
-                    await event.edit("⚠️ خطا")
-        else:
-            await event.edit("⚠️ روی پیام کاربر ریپلای کنید")
-        
-        await event.delete()
+                await event.edit("⚠️ روی پیام کاربر ریپلای کنید")
+            
+            await event.delete()
+            
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_delete_profile_command(self, event, type_):
-        if type_ == 'photo':
-            me = await self.client.get_me()
-            if me.photo:
+        try:
+            if type_ == 'photo':
+                me = await self.client.get_me()
+                if me.photo:
+                    try:
+                        photos = await self.client.get_profile_photos(me.id, limit=1)
+                        if photos:
+                            await self.client(DeletePhotosRequest(id=[photos[0]]))
+                        await event.edit("✅ عکس پروفایل حذف شد")
+                    except FloodWaitError as e:
+                        await event.edit(f"⚠️ {e.seconds} ثانیه صبر کنید")
+                    except:
+                        await event.edit("⚠️ خطا")
+                else:
+                    await event.edit("⚠️ عکس پروفایلی وجود ندارد")
+            else:
                 try:
-                    photos = await self.client.get_profile_photos(me.id, limit=1)
-                    if photos:
-                        await self.client(DeletePhotosRequest(id=[photos[0]]))
-                    await event.edit("✅ عکس پروفایل حذف شد")
+                    await self.client(UpdateProfileRequest(about=""))
+                    await event.edit("✅ بیو خالی شد")
                 except:
                     await event.edit("⚠️ خطا")
-            else:
-                await event.edit("⚠️ عکس پروفایلی وجود ندارد")
-        else:
+            
+            await event.delete()
+            
+        except Exception as e:
+            logger.error(f"خطا: {e}")
             try:
-                await self.client(UpdateProfileRequest(about=""))
-                await event.edit("✅ بیو خالی شد")
+                await event.delete()
             except:
-                await event.edit("⚠️ خطا")
-        
-        await event.delete()
+                pass
     
     async def handle_full_date_command(self, event):
-        await self.client.send_message(event.chat_id, get_full_date_info())
-        await event.delete()
+        try:
+            date_info = get_full_date_info()
+            settings = db.get_selfbot_settings(self.user_id)
+            text, entities = await apply_text_style(date_info, settings.get('text_style'))
+            await self.client.send_message(event.chat_id, text, formatting_entities=entities)
+            await event.delete()
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_spam_command(self, event):
-        match = re.match(r'^اسپم\s+(\d+)\s+(.+)$', event.text.lower())
-        num = int(match.group(1))
-        message = match.group(2)
-        
-        if event.is_reply:
-            reply_message = await event.get_reply_message()
-            message = reply_message.text or message
-        
-        for _ in range(num):
-            await self.client.send_message(event.chat_id, message)
-            await asyncio.sleep(0.05)
-        
-        await event.edit(f"✅ {num} پیام اسپم ارسال شد")
+        try:
+            match = re.match(r'^اسپم\s+(\d+)\s+(.+)$', event.text.lower())
+            num = int(match.group(1))
+            message = match.group(2)
+            
+            if event.is_reply:
+                reply_message = await event.get_reply_message()
+                message = reply_message.text or message
+            
+            for _ in range(num):
+                settings = db.get_selfbot_settings(self.user_id)
+                text, entities = await apply_text_style(message, settings.get('text_style'))
+                await self.client.send_message(event.chat_id, text, formatting_entities=entities)
+                await asyncio.sleep(0.05)
+            
+            await event.edit(f"✅ {num} پیام اسپم ارسال شد")
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_block_command(self, event):
-        if isinstance(event.message.peer_id, PeerUser):
-            target_id = event.message.peer_id.user_id
-            await self.client(BlockRequest(id=target_id))
-            await event.edit("✅ کاربر بلاک شد")
-        else:
-            await event.edit("⚠️ فقط در پی‌وی")
+        try:
+            if isinstance(event.message.peer_id, PeerUser):
+                target_id = event.message.peer_id.user_id
+                await self.client(BlockRequest(id=target_id))
+                await event.edit("✅ کاربر بلاک شد")
+            else:
+                await event.edit("⚠️ فقط در پی‌وی")
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_reaction_command(self, event, action):
-        chat_id = None
-        if isinstance(event.message.peer_id, PeerUser):
-            chat_id = event.message.peer_id.user_id
-        elif isinstance(event.message.peer_id, PeerChannel):
-            chat_id = event.message.peer_id.channel_id
-        elif isinstance(event.message.peer_id, PeerChat):
-            chat_id = event.message.peer_id.chat_id
-        
-        target_id = await get_target_user(event, self.client)
-        
-        if action == 'set':
-            match = re.match(r'^ریکت\s*([\U0001F300-\U0001F9FF]+)?$', event.text.lower())
-            emoji = match.group(1) if match and match.group(1) else None
+        try:
+            chat_id = None
+            if isinstance(event.message.peer_id, PeerUser):
+                chat_id = event.message.peer_id.user_id
+            elif isinstance(event.message.peer_id, PeerChannel):
+                chat_id = event.message.peer_id.channel_id
+            elif isinstance(event.message.peer_id, PeerChat):
+                chat_id = event.message.peer_id.chat_id
             
-            if not emoji:
-                await event.edit("⚠️ ایموجی وارد کنید")
-                return
+            target_id = await get_target_user(event, self.client)
             
-            if emoji in ALLOWED_EMOJIS:
-                db.set_reaction(self.user_id, chat_id, target_id, emoji)
-                await event.edit(f"✅ ریکت {emoji} تنظیم شد")
+            if action == 'set':
+                match = re.match(r'^ریکت\s*([\U0001F300-\U0001F9FF]+)?$', event.text.lower())
+                emoji = match.group(1) if match and match.group(1) else None
+                
+                if not emoji:
+                    await event.edit("⚠️ ایموجی وارد کنید")
+                    return
+                
+                if emoji in ALLOWED_EMOJIS:
+                    db.set_reaction(self.user_id, chat_id, target_id, emoji)
+                    await event.edit(f"✅ ریکت {emoji} برای کاربر {target_id} تنظیم شد")
+                else:
+                    await event.edit(f"⚠️ ایموجی {emoji} مجاز نیست")
+            
             else:
-                await event.edit(f"⚠️ ایموجی {emoji} مجاز نیست")
-        else:
-            if target_id:
-                db.remove_reaction(self.user_id, chat_id, target_id)
-                await event.edit(f"✅ ریکت حذف شد")
-            else:
-                await event.edit("⚠️ کاربر مشخص نشد")
+                if target_id:
+                    db.remove_reaction(self.user_id, chat_id, target_id)
+                    await event.edit(f"✅ ریکت برای کاربر {target_id} حذف شد")
+                else:
+                    await event.edit("⚠️ کاربر هدف مشخص نشد")
+        
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_ai_command(self, event, ai_type):
-        command_text = event.text.lower()
-        settings = db.get_selfbot_settings(self.user_id)
-        ai_status = settings.get('ai_status', {})
-        
-        if ai_type == 'pm':
-            if command_text == 'پیوی ۱':
-                ai_status.update({'ai_1_pm': True, 'ai_2_pm': False, 'ai_3_pm': False})
-                message = '✅ هوش ۱ (Gemini) در پی‌وی روشن شد'
-            elif command_text == 'پیوی ۲':
-                ai_status.update({'ai_1_pm': False, 'ai_2_pm': True, 'ai_3_pm': False})
-                message = '✅ هوش ۲ (Paxsenix) در پی‌وی روشن شد'
-            elif command_text == 'پیوی ۳':
-                ai_status.update({'ai_1_pm': False, 'ai_2_pm': False, 'ai_3_pm': True})
-                message = '✅ هوش ۳ (DeepSeek) در پی‌وی روشن شد'
+        try:
+            command_text = event.text.lower()
+            settings = db.get_selfbot_settings(self.user_id)
+            ai_status = settings.get('ai_status', {})
+            
+            if ai_type == 'pm':
+                if command_text == 'پیوی ۱':
+                    ai_status['ai_1_pm'] = True
+                    ai_status['ai_2_pm'] = False
+                    ai_status['ai_3_pm'] = False
+                    message = '✅ هوش ۱ (Gemini) در پی‌وی روشن شد'
+                elif command_text == 'پیوی ۲':
+                    ai_status['ai_1_pm'] = False
+                    ai_status['ai_2_pm'] = True
+                    ai_status['ai_3_pm'] = False
+                    message = '✅ هوش ۲ (Paxsenix) در پی‌وی روشن شد'
+                elif command_text == 'پیوی ۳':
+                    ai_status['ai_1_pm'] = False
+                    ai_status['ai_2_pm'] = False
+                    ai_status['ai_3_pm'] = True
+                    message = '✅ هوش ۳ (DeepSeek) در پی‌وی روشن شد'
+                else:
+                    ai_status['ai_1_pm'] = False
+                    ai_status['ai_2_pm'] = False
+                    ai_status['ai_3_pm'] = False
+                    message = '✅ همه هوش‌ها در پی‌وی خاموش شدند'
             else:
-                ai_status.update({'ai_1_pm': False, 'ai_2_pm': False, 'ai_3_pm': False})
-                message = '✅ همه هوش‌ها در پی‌وی خاموش شدند'
-        else:
-            if command_text == 'گروه ۱':
-                ai_status.update({'ai_1_group': True, 'ai_2_group': False, 'ai_3_group': False})
-                message = '✅ هوش ۱ (Gemini) در گروه روشن شد'
-            elif command_text == 'گروه ۲':
-                ai_status.update({'ai_1_group': False, 'ai_2_group': True, 'ai_3_group': False})
-                message = '✅ هوش ۲ (Paxsenix) در گروه روشن شد'
-            elif command_text == 'گروه ۳':
-                ai_status.update({'ai_1_group': False, 'ai_2_group': False, 'ai_3_group': True})
-                message = '✅ هوش ۳ (DeepSeek) در گروه روشن شد'
-            else:
-                ai_status.update({'ai_1_group': False, 'ai_2_group': False, 'ai_3_group': False})
-                message = '✅ همه هوش‌ها در گروه خاموش شدند'
+                if command_text == 'گروه ۱':
+                    ai_status['ai_1_group'] = True
+                    ai_status['ai_2_group'] = False
+                    ai_status['ai_3_group'] = False
+                    message = '✅ هوش ۱ (Gemini) در گروه روشن شد'
+                elif command_text == 'گروه ۲':
+                    ai_status['ai_1_group'] = False
+                    ai_status['ai_2_group'] = True
+                    ai_status['ai_3_group'] = False
+                    message = '✅ هوش ۲ (Paxsenix) در گروه روشن شد'
+                elif command_text == 'گروه ۳':
+                    ai_status['ai_1_group'] = False
+                    ai_status['ai_2_group'] = False
+                    ai_status['ai_3_group'] = True
+                    message = '✅ هوش ۳ (DeepSeek) در گروه روشن شد'
+                else:
+                    ai_status['ai_1_group'] = False
+                    ai_status['ai_2_group'] = False
+                    ai_status['ai_3_group'] = False
+                    message = '✅ همه هوش‌ها در گروه خاموش شدند'
+            
+            db.update_ai_status(self.user_id, ai_status)
+            await event.edit(message)
         
-        db.update_ai_status(self.user_id, ai_status)
-        await event.edit(message)
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_whoami_command(self, event):
-        if isinstance(event.message.peer_id, PeerUser):
-            user_id = event.sender_id
-            user_name = db.get_user_name(user_id)
-            user_info = db.get_user_info(user_id)
-            
-            info_text = f"👤 اطلاعات شما:\n"
-            info_text += f"• نام: {user_name}\n"
-            info_text += f"• آی‌دی: {user_id}\n"
-            
-            if user_info:
-                info_text += f"\n📝 اطلاعات ذخیره شده:\n"
-                for key, value in user_info.items():
-                    info_text += f"• {key}: {value}\n"
-            
-            await event.edit(info_text)
+        try:
+            if isinstance(event.message.peer_id, PeerUser):
+                user_id = event.sender_id
+                user_name = db.get_user_name(user_id)
+                user_info = db.get_user_info(user_id)
+                
+                info_text = f"👤 اطلاعات شما:\n"
+                info_text += f"• نام: {user_name}\n"
+                info_text += f"• آی‌دی: {user_id}\n"
+                
+                if user_info:
+                    info_text += f"\n📝 اطلاعات ذخیره شده:\n"
+                    for key, value in user_info.items():
+                        info_text += f"• {key}: {value}\n"
+                else:
+                    info_text += f"\nℹ️ اطلاعات اضافی ذخیره نشده\n"
+                
+                await event.edit(info_text)
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_report_group_command(self, event, action):
-        if action == 'set':
-            if isinstance(event.message.peer_id, (PeerChannel, PeerChat)):
-                chat_id = event.message.peer_id.channel_id if isinstance(event.message.peer_id, PeerChannel) else event.message.peer_id.chat_id
-                self.report_config.set_report_group(chat_id)
-                await event.edit(f"✅ گروه گزارش تنظیم شد\nآیدی: {chat_id}")
+        try:
+            if action == 'set':
+                if isinstance(event.message.peer_id, (PeerChannel, PeerChat)):
+                    chat_id = event.message.peer_id.channel_id if isinstance(event.message.peer_id, PeerChannel) else event.message.peer_id.chat_id
+                    self.report_config.set_report_group(chat_id)
+                    await event.edit(f"✅ گروه گزارش تنظیم شد\nآیدی: {chat_id}")
+                else:
+                    await event.edit("⚠️ این دستور فقط در گروه کار می‌کند")
             else:
-                await event.edit("⚠️ این دستور فقط در گروه کار می‌کند")
-        else:
-            await event.edit(f"📍 گروه گزارش:\nآیدی: {self.report_config.report_group_id}")
+                await event.edit(f"📍 گروه گزارش فعلی:\nآیدی: {self.report_config.report_group_id}")
+        
+        except Exception as e:
+            logger.error(f"خطا: {e}")
+            try:
+                await event.delete()
+            except:
+                pass
     
     async def handle_search_command(self, event):
         self.search_mode = True
-        await event.edit('🔍 حالت سرچ فعال شد.\nبرای خروج: خروج سرچ')
+        await event.edit('🔍 حالت سرچ فعال شد.\n\nاکنون هر متنی که ارسال کنید در گوگل جستجو می‌شود.\nبرای خروج از حالت سرچ، دستور خروج سرچ را ارسال کنید.')
     
     async def handle_exit_search_command(self, event):
         self.search_mode = False
         self.last_search_results = []
-        await event.edit('✅ حالت سرچ غیرفعال شد')
-    
-    async def handle_google_search(self, event, query):
-        try:
-            await event.edit(f'🔍 در حال جستجو: {query}')
-            
-            params = {
-                'key': GOOGLE_SEARCH_API_KEY,
-                'cx': GOOGLE_CSE_ID,
-                'q': query,
-                'num': 5
-            }
-            
-            response = requests.get(GOOGLE_SEARCH_URL, params=params, timeout=10)
-            
-            if response.status_code == 200:
-                results = response.json()
-                
-                if 'items' in results:
-                    text = f"🔍 نتایج جستجو برای: {query}\n\n"
-                    for i, item in enumerate(results['items'][:5], 1):
-                        text += f"{i}. {item.get('title', 'بدون عنوان')}\n"
-                        text += f"   {item.get('snippet', 'بدون توضیح')[:100]}...\n"
-                        text += f"   🔗 {item.get('link', '')}\n\n"
-                    
-                    await event.edit(text)
-                else:
-                    await event.edit(f'❌ نتیجه‌ای برای "{query}" پیدا نشد')
-            else:
-                await event.edit(f'❌ خطا: {response.status_code}')
-                
-        except Exception as e:
-            await event.edit(f'❌ خطا: {str(e)}')
+        await event.edit('✅ حالت سرچ غیرفعال شد.')
     
     async def handle_outgoing_message(self, event):
         message_text = event.text or ""
@@ -3487,162 +4413,93 @@ class SelfBotManager:
             return
         
         async def spam_task():
-            while db.is_enemy(self.user_id, enemy_id):
+            while db.is_enemy(self.user_id, enemy_id, 'pv'):
                 spam_messages = db.get_enemy_spam_messages(self.user_id)
                 
                 if spam_messages:
                     for spam_message in spam_messages:
                         try:
-                            await self.client.send_message(enemy_id, spam_message['text'])
+                            settings = db.get_selfbot_settings(self.user_id)
+                            text, entities = await apply_text_style(spam_message['text'], settings.get('text_style'))
+                            await self.client.send_message(enemy_id, text, formatting_entities=entities)
                         except:
                             pass
                         await asyncio.sleep(1)
                 else:
                     for spam_message in SPAM_MESSAGES:
                         try:
-                            await self.client.send_message(enemy_id, spam_message)
+                            settings = db.get_selfbot_settings(self.user_id)
+                            text, entities = await apply_text_style(spam_message, settings.get('text_style'))
+                            await self.client.send_message(enemy_id, text, formatting_entities=entities)
                         except:
                             pass
                         await asyncio.sleep(1)
         
         self.spam_tasks[enemy_id] = asyncio.create_task(spam_task())
     
-    async def handle_translate_commands(self, event):
-        text = event.raw_text.strip()
+    async def update_profile_name(self):
+        settings = db.get_selfbot_settings(self.user_id)
         
-        langs = ["انگلیسی", "عربی", "عبری", "روسی", "ترکی"]
-        for l in langs:
-            if text.startswith(l):
-                cmd = text.split()[1] if len(text.split()) > 1 else ""
-                key = l.lower()
-                if key == "انگلیسی": key = "english"
-                elif key == "عربی": key = "arabic"
-                elif key == "عبری": key = "hebrew"
-                elif key == "روسی": key = "russian"
-                elif key == "ترکی": key = "turkish"
-                
-                self.translate_mode[key] = True if cmd == "روشن" else False
-                db.update_selfbot_setting(self.user_id, f'translate_{key}', 1 if self.translate_mode[key] else 0)
-                await event.edit(f"✅ ترجمه {l} {'روشن' if self.translate_mode[key] else 'خاموش'} شد")
-                return
-        
-        if text.startswith("تاس"):
-            try:
-                n = int(text.split()[1])
-                if 1 <= n <= 6:
-                    await event.delete()
-                    await self.force_dice(event.chat_id, "🎲", n)
-            except:
-                await event.delete()
-            return
-        elif text == "دارت":
-            await event.delete()
-            await self.force_dice(event.chat_id, "🎯", 6)
-            return
-        elif text == "بسکتبال":
-            await event.delete()
-            await self.force_dice(event.chat_id, "🏀", 5)
-            return
-        elif text == "فوتبال":
-            await event.delete()
-            await self.force_dice(event.chat_id, "⚽️", 5)
-            return
-    
-    async def handle_action_commands(self, event):
-        msg = event.text.strip()
-        chat_id = event.chat_id
-        
-        await self.handle_translate_commands(event)
-        
-        if msg in ["دارت", "بسکتبال", "فوتبال"] or msg.startswith("تاس") or \
-           any(msg.startswith(f"{lang}") and ("روشن" in msg or "خاموش" in msg) for lang in ["انگلیسی", "عربی", "عبری", "روسی", "ترکی"]):
-            return
-        
-        if msg.startswith('اکشن '):
-            command = msg.replace('اکشن ', '').strip()
+        if settings.get('time_enabled'):
+            now = datetime.now()
+            current_minute = now.minute
             
-            if command == 'خاموش':
-                if chat_id in self.active_actions:
-                    action_name = await self.stop_action(chat_id)
-                    await event.edit(f'✅ اکشن {action_name} خاموش شد')
+            if self.time_font_indices == 'all':
+                font_index = current_minute % len(classic_fonts)
+                font = classic_fonts[font_index]
+            elif isinstance(self.time_font_indices, list) and self.time_font_indices:
+                if hasattr(self, 'time_font_cycle'):
+                    self.time_font_cycle = (self.time_font_cycle + 1) % len(self.time_font_indices)
                 else:
-                    await event.edit('❌ هیچ اکشن فعالی وجود ندارد')
-                return
-                
-            elif command == 'لیست':
-                if self.active_actions:
-                    active_list = "🎭 اکشن‌های فعال:\n\n"
-                    for cid, action in self.active_actions.items():
-                        try:
-                            chat_obj = await self.client.get_entity(cid)
-                            chat_name = chat_obj.first_name if hasattr(chat_obj, 'first_name') else chat_obj.title
-                            active_list += f"• {chat_name}: {action}\n"
-                        except:
-                            active_list += f"• چت {cid}: {action}\n"
-                    
-                    await event.edit(active_list)
+                    self.time_font_cycle = 0
+                font_index = self.time_font_indices[self.time_font_cycle]
+                if font_index < len(classic_fonts):
+                    font = classic_fonts[font_index]
                 else:
-                    await event.edit('❌ هیچ اکشن فعالی وجود ندارد')
-                return
-                
+                    font = classic_fonts[0]
             else:
-                if command in action_types:
-                    if chat_id in self.active_actions:
-                        old_action = self.active_actions[chat_id]
-                        await self.stop_action(chat_id)
-                        await event.edit(f'⏹️ اکشن {old_action} خاموش شد\n✅ اکشن {command} فعال شد')
-                    else:
-                        await event.edit(f'✅ اکشن {command} فعال شد')
-                    
-                    await self.start_action(chat_id, command)
-                    await asyncio.sleep(3)
-                    await event.delete()
-                    return
-                else:
-                    available = "\n".join([f"• {name}" for name in action_types.keys()])
-                    await event.edit(f'❌ اکشن "{command}" پشتیبانی نمی‌شود\n\n✅ اکشن‌های موجود:\n{available}')
-                    return
-        
-        if msg == 'سرچ':
-            self.search_mode = True
-            await event.edit('🔍 حالت سرچ فعال شد.\nبرای خروج: خروج سرچ')
-            return
-        
-        elif msg == 'خروج سرچ':
-            self.search_mode = False
-            self.last_search_results = []
-            await event.edit('✅ حالت سرچ غیرفعال شد')
-            return
-        
-        if self.search_mode and msg:
-            await self.handle_google_search(event, msg)
-            return
-        
-        active_lang_code = None
-        lang_mapping = {
-            "english": "en",
-            "arabic": "ar",
-            "hebrew": "he",
-            "russian": "ru",
-            "turkish": "tr"
-        }
-        
-        for lang_key, status in self.translate_mode.items():
-            if status and lang_key in lang_mapping:
-                active_lang_code = lang_mapping[lang_key]
-                break
-        
-        if active_lang_code and msg:
+                font = classic_fonts[0]
+            
+            time_now = now.strftime("%H:%M")
+            time_now_classic = convert_to_classic_font(time_now, font_index if isinstance(font_index, int) else 0)
+            
             try:
-                from deep_translator import GoogleTranslator
-                translated = GoogleTranslator(source='auto', target=active_lang_code).translate(msg)
-                await event.edit(translated)
-                return
+                current_name = db.get_current_name(self.user_id)
+                if not current_name:
+                    current_name = self.BASE_NAME
+                
+                if settings.get('flag_enabled'):
+                    flag_index = current_minute % len(flags)
+                    flag = flags[flag_index]
+                    new_name = f"『 {flag} 』{current_name} {time_now_classic}"
+                else:
+                    new_name = f"{current_name} | {time_now_classic}"
+                
+                await self.client(UpdateProfileRequest(first_name=new_name))
             except:
                 pass
-
-db = MainDatabase()
-selfbot_managers = {}
+    
+    async def restore_profile_name(self):
+        try:
+            current_name = db.get_current_name(self.user_id)
+            if current_name:
+                await self.client(UpdateProfileRequest(first_name=current_name))
+            else:
+                original_name = db.get_original_name(self.user_id)
+                if original_name:
+                    await self.client(UpdateProfileRequest(first_name=original_name))
+                    db.set_current_name(self.user_id, original_name)
+                    self.BASE_NAME = original_name
+        except:
+            pass
+    
+    async def update_profile_task(self):
+        while self.running:
+            try:
+                await self.update_profile_name()
+            except Exception as e:
+                logger.error(f"خطا در update_profile_task برای کاربر {self.user_id}: {e}")
+            await asyncio.sleep(60)
 
 # ========== توابع کیبورد ==========
 
@@ -3710,6 +4567,22 @@ def get_tools_menu_keyboard(user_id):
         [InlineKeyboardButton("⚈ بازگشت", callback_data=f"back_main")]
     ]
     return InlineKeyboardMarkup(keyboard)
+
+def get_broadcast_menu_keyboard(user_id):
+    # فقط برای ادمین
+    if user_id != ADMIN_ID:
+        return InlineKeyboardMarkup([[InlineKeyboardButton("⚈ بازگشت", callback_data=f"back_main")]])
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("☖ پیام همگانی", callback_data=f"exec_broadcast_{user_id}"),
+            InlineKeyboardButton("✿ آمار کاربران", callback_data=f"exec_user_stats_{user_id}")
+        ],
+        [InlineKeyboardButton("⚈ بازگشت", callback_data=f"back_main")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+# ========== بقیه توابع کیبورد مشابه قبل ==========
 
 def get_time_menu_keyboard(user_id):
     settings = db.get_selfbot_settings(user_id)
@@ -4190,6 +5063,7 @@ async def admin_broadcast_handler(update: Update, context: ContextTypes.DEFAULT_
     await query.edit_message_text(
         "📢 ارسال پیام همگانی\n\n"
         "لطفاً پیام خود را ارسال کنید.\n\n"
+        "⚠️ توجه: این پیام برای همه کاربران فعال ارسال خواهد شد.\n\n"
         "برای لغو: /cancel"
     )
     
@@ -4209,17 +5083,19 @@ async def handle_broadcast_message(update: Update, context: ContextTypes.DEFAULT
     
     if update.message.text == '/cancel':
         context.user_data['broadcast_mode'] = False
-        await update.message.reply_text("✅ لغو شد")
+        await update.message.reply_text("✅ ارسال پیام همگانی لغو شد")
         return
     
     message_text = update.message.text
-    await update.message.reply_text("⏳ در حال ارسال...")
+    await update.message.reply_text("⏳ در حال ارسال پیام همگانی...")
     
     all_users = db.get_all_users()
     active_users = [u for u in all_users if u.get('self_active')]
     
     sent_count = 0
     failed_count = 0
+    
+    broadcast_id = db.add_broadcast(user_id, message_text, 'text')
     
     for user in active_users:
         try:
@@ -4230,16 +5106,24 @@ async def handle_broadcast_message(update: Update, context: ContextTypes.DEFAULT
             )
             sent_count += 1
             await asyncio.sleep(0.1)
-        except:
+        except Exception as e:
+            logger.error(f"خطا در ارسال به {user['user_id']}: {e}")
             failed_count += 1
     
+    db.update_broadcast_stats(broadcast_id, sent_count, failed_count)
+    
     result_text = f"""
-✅ ارسال کامل شد!
+✅ ارسال پیام همگانی کامل شد!
 
-📊 آمار:
-• کل کاربران: {len(active_users)}
-• موفق: {sent_count}
-• ناموفق: {failed_count}
+📊 آمار ارسال:
+• کل کاربران فعال: {len(active_users)}
+• ارسال موفق: {sent_count}
+• ارسال ناموفق: {failed_count}
+
+📝 متن پیام:
+{message_text[:200]}
+
+🕐 زمان: {datetime.now().strftime('%Y/%m/%d %H:%M:%S')}
     """
     
     await update.message.reply_text(result_text)
@@ -4256,13 +5140,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     user_id_str = str(user_id)
     
+    # بررسی مالکیت پنل
     if '_' in data and not data.startswith(('admin_', 'approve_', 'reject_', 'stop_selfbot_', 'restart_selfbot_', 'desc_', 'menu_')):
         parts = data.split('_')
         for part in parts:
-            if part.isdigit() and len(part) >= 5 and part != user_id_str:
-                await query.answer("⛔ این پنل مال شما نیست", show_alert=True)
-                return
+            if part.isdigit() and len(part) >= 5:
+                if part != user_id_str:
+                    await query.answer("⛔ این پنل مال شما نیست", show_alert=True)
+                    return
+                break
     
+    # بستن پنل
     if data.startswith("close_panel_"):
         await query.answer("❌ بستن پنل")
         try:
@@ -4273,7 +5161,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if data == "back_main":
         await query.edit_message_text(
-            "🌟 پنل مدیریت سلف‌بات\n\n⚠️ توجه: این پنل فقط مخصوص شماست",
+            "🌟 پنل مدیریت سلف‌بات\n\n⚠️ توجه: این پنل فقط مخصوص شماست\n\n✅ سلف‌بات به صورت ۲۴ ساعته فعال می‌ماند",
             reply_markup=get_main_panel_keyboard(user_id)
         )
         return
@@ -4334,34 +5222,36 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await exec_command_handler(update, context)
         return
     
+    # منوها
     parts = data.split('_')
     if len(parts) > 1:
         action = parts[0]
         
         menu_keyboards = {
-            "time": ("⚈ دستورات زمان و پروفایل", get_time_menu_keyboard),
-            "animation": ("☻ انیمیشن‌ها", get_animation_menu_keyboard),
-            "user": ("☗ مدیریت کاربران", get_user_menu_keyboard),
-            "lock": ("⊖ قفل رسانه", get_lock_menu_keyboard),
-            "comment": ("✼ کامنت خودکار", get_comment_menu_keyboard),
-            "general": ("✿ دستورات عمومی", get_general_menu_keyboard),
-            "action": ("☥ اکشن‌ها", get_action_menu_keyboard),
-            "games": ("⚕ بازی‌ها", get_games_menu_keyboard),
-            "translate": ("❍ ترجمه خودکار", get_translate_menu_keyboard),
-            "google": ("𖢅 گوگل و اهنگ", get_google_menu_keyboard),
-            "info": ("֍ دستورات اطلاعاتی", get_info_menu_keyboard),
-            "profile": ("𖢨 مدیریت پروفایل", get_profile_menu_keyboard),
-            "style": ("⩐ استایل متن", get_style_menu_keyboard),
-            "message": ("𑪡 مدیریت پیام", get_message_menu_keyboard),
-            "reaction": ("☖ ریکشن خودکار", get_reaction_menu_keyboard),
-            "spam": ("𖥞 ارسال اسپم", get_spam_menu_keyboard),
-            "change": ("☗ تغییر پروفایل", get_change_menu_keyboard),
-            "enemy": ("⚇ مدیریت دشمنان", get_enemy_menu_keyboard),
-            "filter": ("✿ فیلتر کلمات", get_filter_menu_keyboard),
-            "protection": ("⚉ حفاظت اسپم", get_protection_menu_keyboard),
-            "ai": ("☥ هوش مصنوعی", get_ai_menu_keyboard),
-            "report": ("֎ گزارش", get_report_menu_keyboard),
-            "tools": ("🛠 ابزارها", get_tools_menu_keyboard)
+            "time": ("⚈ دستورات زمان و پروفایل\n\n• تایم روشن\n• تایمر پرچم روشن\n• تایم خاموش\n• تایم [اعداد]\n• تاریخ کامل", get_time_menu_keyboard),
+            "animation": ("☻ انیمیشن‌ها\n\n• قلب\n• ماه\n• قلب پیشرفته\n• عشق\n• سنتت\n• هک", get_animation_menu_keyboard),
+            "user": ("☗ مدیریت کاربران\n\n• دشمن (ریپلای)\n• دوست (ریپلای)\n• قفل پیوی (ریپلای)\n• باز پی (ریپلای)\n• قفل پیوی همه\n• باز پی همه\n• بلاک", get_user_menu_keyboard),
+            "lock": ("⊖ قفل رسانه (با ریپلای برای کاربر خاص)\n\n• قفل لینک\n• قفل عکس\n• قفل ویدیو\n• قفل استیکر\n• قفل گیف\n• قفل ویس\n• قفل فایل\n• قفل موزیک\n• قفل ویدیو نوت\n• قفل کانتکت\n• قفل لوکیشن\n• قفل ایموجی\n• قفل متن", get_lock_menu_keyboard),
+            "comment": ("✼ کامنت خودکار\n\n• کامنت [متن]\n• کانال‌ها\n• حذف کانال\n• تست کانال", get_comment_menu_keyboard),
+            "general": ("✿ دستورات عمومی\n\n• وضعیت\n• درباره\n• پینگ", get_general_menu_keyboard),
+            "action": ("☥ اکشن‌ها\n\n• اکشن [نام]\n• اکشن خاموش\n• اکشن لیست\n\nلیست اکشن‌ها:\n• تایپ\n• ویس\n• ویدیو\n• عکس\n• فیلم\n• فایل\n• بازی\n• استیکر\n• موقعیت\n• تماس\n• صحبت\n• لغو", get_action_menu_keyboard),
+            "games": ("⚕ بازی‌ها\n\n• تاس [1-6]\n• دارت\n• بسکتبال\n• فوتبال", get_games_menu_keyboard),
+            "translate": ("❍ ترجمه خودکار\n\n• انگلیسی روشن/خاموش\n• عربی روشن/خاموش\n• عبری روشن/خاموش\n• روسی روشن/خاموش\n• ترکی روشن/خاموش", get_translate_menu_keyboard),
+            "google": ("𖢅 گوگل و اهنگ\n\n• سرچ [موضوع]\n• خروج جستجو\n• .اهنگ [نام آهنگ]", get_google_menu_keyboard),
+            "info": ("֍ دستورات اطلاعاتی\n\n• اطلاعات (ریپلای)\n• دانلود پروفایل (ریپلای)", get_info_menu_keyboard),
+            "profile": ("𖢨 مدیریت پروفایل\n\n• ست پروف (ریپلای)\n• ست بیو (ریپلای)\n• حذف ست پروف\n• حذف ست بیو", get_profile_menu_keyboard),
+            "style": ("⩐ استایل متن\n\n• بولد\n• زیرخط\n• خط خورده\n• نقل قول\n• اسپویلر\n• کج\n• کد\n• پیش", get_style_menu_keyboard),
+            "message": ("𑪡 مدیریت پیام\n\n• حذف کامل\n• حذف کامل ۵۰\n• حذف ۱۰\n• فعال اتوسین\n• غیرفعال اتوسین", get_message_menu_keyboard),
+            "reaction": ("☖ ریکشن خودکار\n\n• ریکت [ایموجی] (ریپلای)\n• حذف ریکت (ریپلای)", get_reaction_menu_keyboard),
+            "spam": ("𖥞 ارسال اسپم\n\n• اسپم [تعداد] [متن]", get_spam_menu_keyboard),
+            "change": ("☗ تغییر پروفایل\n\n• تغییر اسم [نام]\n• تغییر بیو [متن]\n• تغییر پروفایل (ریپلای)\n• پروف (ریپلای)", get_change_menu_keyboard),
+            "enemy": ("⚇ مدیریت دشمنان\n\n• لیست دشمن\n• اضافه اسپم\n• اتمام اسپم\n• لیست اسپم\n• پاک کردن اسپم\n• حذف اسپم [شماره]", get_enemy_menu_keyboard),
+            "filter": ("✿ فیلتر کلمات\n\n• .فیلتر [کلمه]\n• فیلتر روشن\n• فیلتر خاموش\n• لیست فیلتر\n• حذف فیلتر [کلمه]", get_filter_menu_keyboard),
+            "protection": ("⚉ حفاظت اسپم\n\n• اسپم روشن\n• اسپم خاموش\n• تنظیم اسپم [تعداد] [زمان]\n• وضعیت اسپم", get_protection_menu_keyboard),
+            "ai": ("☥ هوش مصنوعی\n\n• پیوی ۱/۲/۳\n• خاموش پیوی\n• گروه ۱/۲/۳\n• خاموش گروه", get_ai_menu_keyboard),
+            "report": ("֎ گزارش\n\n• تنظیم گزارش\n• گروه گزارش", get_report_menu_keyboard),
+            "broadcast": ("☖ پیام همگانی\n\n• ارسال پیام به همه کاربران\n• مشاهده آمار کاربران", get_broadcast_menu_keyboard),
+            "tools": ("🛠 ابزارها\n\n• امار گپ - آمار پیام‌ها در چت\n• کد QR - تولید کد QR از متن یا عکس\n• تگ ادمین - نمایش ادمین‌های گروه\n• پین - پین کردن پیام\n• سلف روشن/خاموش - فعال/غیرفعال کردن سلف‌بات", get_tools_menu_keyboard)
         }
         
         if action in menu_keyboards and parts[1] == "menu":
@@ -4420,10 +5310,10 @@ async def admin_requests_handler(update: Update, context: ContextTypes.DEFAULT_T
     
     pending = db.get_pending_requests()
     if pending:
-        text = "📋 درخواست‌ها:\n\n"
+        text = "📋 درخواست‌های عضویت:\n\n"
         keyboard = []
         for req in pending[:10]:
-            text += f"👤 {req['full_name']}\n🆔 {req['user_id']}\n\n"
+            text += f"👤 {req['full_name']}\n🆔 {req['user_id']}\n📅 {req.get('request_date', 'نامشخص')}\n\n"
             keyboard.append([
                 InlineKeyboardButton(f"✅ تأیید {req['user_id']}", callback_data=f"approve_{req['user_id']}"),
                 InlineKeyboardButton(f"❌ رد {req['user_id']}", callback_data=f"reject_{req['user_id']}")
@@ -4431,7 +5321,7 @@ async def admin_requests_handler(update: Update, context: ContextTypes.DEFAULT_T
         keyboard.append([InlineKeyboardButton("⚈ بازگشت", callback_data=f"admin_panel")])
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     else:
-        await query.edit_message_text("📋 هیچ درخواستی نیست")
+        await query.edit_message_text("📋 هیچ درخواستی در انتظار نیست")
 
 async def admin_login_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -4448,7 +5338,7 @@ async def admin_login_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     if pending:
         text = "🔐 کاربران در مرحله ورود:\n\n"
         for user in pending[:10]:
-            text += f"👤 {user['full_name']}\n🆔 {user['user_id']}\n📞 {user.get('phone', 'نامشخص')}\n\n"
+            text += f"👤 {user['full_name']}\n🆔 {user['user_id']}\n📞 {user.get('phone', 'نامشخص')}\nمرحله: {user.get('step', 'نامشخص')}\n\n"
         await query.edit_message_text(text)
     else:
         await query.edit_message_text("🔐 هیچ کاربری در مرحله ورود نیست")
@@ -4468,7 +5358,7 @@ async def admin_active_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     if active:
         text = "✅ کاربران فعال:\n\n"
         for user in active[:10]:
-            text += f"👤 {user['full_name']}\n🆔 {user['user_id']}\n📞 {user.get('phone', 'نامشخص')}\n"
+            text += f"👤 {user['full_name']}\n🆔 {user['user_id']}\n📞 {user.get('phone', 'نامشخص')}\n📅 انقضا: {user.get('expiration_date', 'نامشخص')}\n"
             text += f"🤖 سلف‌بات: {'✅' if user['user_id'] in selfbot_managers else '❌'}\n\n"
         await query.edit_message_text(text)
     else:
@@ -4488,7 +5378,7 @@ async def admin_selfbots_handler(update: Update, context: ContextTypes.DEFAULT_T
     if selfbot_managers:
         text = "🤖 سلف‌بات‌های فعال:\n\n"
         keyboard = []
-        for uid in list(selfbot_managers.keys())[:10]:
+        for uid, manager in list(selfbot_managers.items())[:10]:
             user_data = db.get_user(uid)
             name = user_data['full_name'] if user_data else f"کاربر {uid}"
             text += f"👤 {name}\n🆔 {uid}\n\n"
@@ -4499,7 +5389,7 @@ async def admin_selfbots_handler(update: Update, context: ContextTypes.DEFAULT_T
         keyboard.append([InlineKeyboardButton("⚈ بازگشت", callback_data=f"admin_panel")])
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     else:
-        await query.edit_message_text("🤖 هیچ سلف‌باتی فعال نیست")
+        await query.edit_message_text("🤖 هیچ سلف‌باتی در حال اجرا نیست")
 
 async def admin_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -4512,19 +5402,25 @@ async def admin_stats_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     if user_id != ADMIN_ID:
         return
     
+    total_users = len(db.get_all_users())
+    active_users = len(db.get_active_users())
+    pending_requests = len(db.get_pending_requests())
+    pending_login = len(db.get_pending_login())
+    active_selfbots = len(selfbot_managers)
+    
     stats = f"""
 📊 آمار کلی
 ━━━━━━━━━━━━━━━━━━━━
-👥 کل کاربران: {len(db.get_all_users())}
-✅ کاربران فعال: {len(db.get_active_users())}
-📋 درخواست‌ها: {len(db.get_pending_requests())}
-🔐 منتظر ورود: {len(db.get_pending_login())}
-🤖 سلف‌بات فعال: {len(selfbot_managers)}
+👥 کل کاربران: {total_users}
+✅ کاربران فعال: {active_users}
+📋 درخواست‌ها: {pending_requests}
+🔐 منتظر ورود: {pending_login}
+🤖 سلف‌بات فعال: {active_selfbots}
+
+🕐 آخرین به‌روزرسانی: {datetime.now().strftime('%Y/%m/%d %H:%M:%S')}
 ━━━━━━━━━━━━━━━━━━━━
     """
     await query.edit_message_text(stats)
-
-# ========== توابع تأیید و رد ==========
 
 async def approve_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -4538,7 +5434,8 @@ async def approve_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("⛔ دسترسی غیرمجاز", show_alert=True)
         return
     
-    target_id = query.data.split('_')[1]
+    data = query.data
+    target_id = data.split('_')[1]
     
     user_data = db.get_user(target_id)
     if not user_data:
@@ -4550,7 +5447,7 @@ async def approve_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await context.bot.send_message(
             chat_id=int(target_id),
-            text="🎉 درخواست شما تأیید شد!\n\nلطفاً شماره تلفن خود را وارد کنید:"
+            text="🎉 درخواست عضویت شما تأیید شد!\n\nلطفاً شماره تلفن خود را وارد کنید:\nمثال: +989123456789"
         )
         db.update_user(target_id, step='get_phone')
     except:
@@ -4571,7 +5468,8 @@ async def reject_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("⛔ دسترسی غیرمجاز", show_alert=True)
         return
     
-    target_id = query.data.split('_')[1]
+    data = query.data
+    target_id = data.split('_')[1]
     
     user_data = db.get_user(target_id)
     if not user_data:
@@ -4583,7 +5481,7 @@ async def reject_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await context.bot.send_message(
             chat_id=int(target_id),
-            text="⚠ درخواست شما رد شد."
+            text="⚠ درخواست عضویت شما رد شد.\n\nمی‌توانید دوباره درخواست دهید"
         )
     except:
         pass
@@ -4603,12 +5501,13 @@ async def stop_selfbot_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.answer("⛔ دسترسی غیرمجاز", show_alert=True)
         return
     
-    target_id = query.data.split('_')[2]
+    data = query.data
+    target_id = data.split('_')[2]
     
     if target_id in selfbot_managers:
         await selfbot_managers[target_id].stop()
         del selfbot_managers[target_id]
-        await query.answer(f"✅ سلف‌بات {target_id} متوقف شد", show_alert=True)
+        await query.answer(f"✅ سلف‌بات کاربر {target_id} متوقف شد", show_alert=True)
     else:
         await query.answer("❌ سلف‌بات فعال نیست", show_alert=True)
 
@@ -4624,7 +5523,8 @@ async def restart_selfbot_handler(update: Update, context: ContextTypes.DEFAULT_
         await query.answer("⛔ دسترسی غیرمجاز", show_alert=True)
         return
     
-    target_id = query.data.split('_')[2]
+    data = query.data
+    target_id = data.split('_')[2]
     
     user_data = db.get_user(target_id)
     if not user_data or not user_data.get('self_active'):
@@ -4643,11 +5543,11 @@ async def restart_selfbot_handler(update: Update, context: ContextTypes.DEFAULT_
     manager = SelfBotManager(target_id)
     if await manager.start(session_file):
         selfbot_managers[target_id] = manager
-        await query.answer(f"✅ سلف‌بات {target_id} راه‌اندازی شد", show_alert=True)
+        await query.answer(f"✅ سلف‌بات کاربر {target_id} راه‌اندازی مجدد شد", show_alert=True)
     else:
-        await query.answer("❌ خطا در راه‌اندازی", show_alert=True)
+        await query.answer("❌ خطا در راه‌اندازی مجدد", show_alert=True)
 
-# ========== اجرای دستورات پنل ==========
+# ========== اجرای دستورات ==========
 
 async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -4664,15 +5564,16 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
     
     parts = data.split('_')
-    owner_id = None
-    for part in reversed(parts):
-        if part.isdigit():
-            owner_id = part
-            break
-    
-    if owner_id and str(owner_id) != user_id_str:
-        await query.answer("⛔ این پنل مال شما نیست", show_alert=True)
-        return
+    if len(parts) >= 2:
+        owner_id = None
+        for part in reversed(parts):
+            if part.isdigit():
+                owner_id = part
+                break
+        
+        if owner_id and str(owner_id) != user_id_str:
+            await query.answer("⛔ این پنل مال شما نیست", show_alert=True)
+            return
     
     if user_id_str not in selfbot_managers:
         await query.edit_message_text("❌ سلف‌بات شما فعال نیست")
@@ -4686,38 +5587,48 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         text=f"⏳ در حال اجرا..."
     )
     
-    # ========== دستورات ==========
+            # ========== دستورات جدید ==========
     
     if cmd == 'stats':
-        await msg.edit_text("📊 در حال دریافت آمار...")
+        # امار گپ
+        await msg.edit_text("📊 در حال دریافت آمار گفتگو...")
+        
         target_user_id = None
         
+        # ✅ اگر ریپلای داشت، از ریپلای استفاده کن
         if query.message.reply_to_message:
             target_user_id = query.message.reply_to_message.from_user.id
+            # اگر from_user.id وجود نداشت، از sender_id استفاده کن
             if not target_user_id:
                 target_user_id = query.message.reply_to_message.sender_id
         
+        # ✅ اگر در پی‌وی بود، از خود کاربر استفاده کن
         if not target_user_id and query.message.chat.type == 'private':
             target_user_id = query.message.chat.id
         
+        # ✅ اگر هنوز target_user_id نداریم، خطا بده
         if not target_user_id:
-            await msg.edit_text("⚠️ روی پیام کاربر ریپلای کنید")
+            await msg.edit_text("⚠️ لطفاً روی پیام کاربر ریپلای کنید یا در پی‌وی از این دستور استفاده کنید")
             return
         
+        # ✅ تبدیل به int
         target_user_id = int(target_user_id)
-        stats = await manager.get_chat_stats(query.message.chat_id, target_user_id)
         
+        # ✅ دریافت آمار
+        stats = await manager.get_chat_stats(query.message.chat_id, target_user_id)
         if not stats:
             await msg.edit_text("⚠️ خطا در دریافت آمار")
             return
         
         try:
+            # ✅ دریافت نام کاربران
             target_name = await manager.get_user_info(target_user_id)
             my_name = await manager.get_user_info(manager.my_id)
             
             total_my = stats['my_messages']
             total_target = stats['target_messages']
             
+            # تعیین برنده
             if total_my > total_target:
                 winner = my_name
             elif total_target > total_my:
@@ -4725,6 +5636,7 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             else:
                 winner = "مساوی"
             
+            # نسبت پیام‌ها
             if total_target > 0:
                 ratio = f"{total_my} به {total_target}"
             else:
@@ -4748,6 +5660,7 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             """
             
+            # ✅ ارسال آمار
             await manager.client.send_message(query.message.chat_id, stats_text)
             await msg.delete()
             
@@ -4757,6 +5670,7 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     
     if cmd == 'qr':
         await msg.edit_text("🝰 در حال تولید کد QR...")
+        
         try:
             if query.message.reply_to_message:
                 reply_msg = await manager.client.get_messages(query.message.chat_id, ids=query.message.reply_to_message.message_id)
@@ -4765,22 +5679,25 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 elif reply_msg.photo:
                     qr_path, text = await manager.generate_qr_code(reply_msg.media, is_photo=True)
                 else:
-                    await msg.edit_text("⚠️ روی پیام متنی یا عکس ریپلای کنید")
+                    await msg.edit_text("⚠️ لطفاً روی یک پیام متنی یا عکس ریپلای کنید")
                     return
             else:
-                await msg.edit_text("🝰 لطفاً متن را وارد کنید")
+                # درخواست متن از کاربر
+                await msg.edit_text("🝰 لطفاً متنی که می‌خواهید به کد QR تبدیل شود را وارد کنید")
+                # TODO: دریافت متن از کاربر
                 return
             
             if qr_path and os.path.exists(qr_path):
                 await manager.client.send_file(
                     query.message.chat_id,
                     qr_path,
-                    caption=f"🝰 کد QR\n📝 متن: {text[:100]}"
+                    caption=f"🝰 کد QR\n📝 متن: {text[:100]}{'...' if len(text) > 100 else ''}"
                 )
                 os.remove(qr_path)
                 await msg.delete()
             else:
-                await msg.edit_text(f"⚠️ خطا: {text}")
+                await msg.edit_text(f"⚠️ خطا در تولید کد QR: {text}")
+                
         except Exception as e:
             await msg.edit_text(f"⚠️ خطا: {str(e)[:100]}")
         return
@@ -4792,10 +5709,11 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         
         admins = await manager.get_admins(query.message.chat_id)
         if admins:
-            admin_text = "👑 ادمین‌ها:\n\n"
+            admin_text = "👑 ادمین‌های گروه:\n\n"
             for admin in admins:
                 mention = f"@{admin.username}" if admin.username else f"[{admin.first_name or 'ادمین'}](tg://user?id={admin.id})"
                 admin_text += f"• {mention}\n"
+            
             await msg.edit_text(admin_text, parse_mode='markdown')
         else:
             await msg.edit_text("⚠️ ادمینی یافت نشد")
@@ -4807,9 +5725,9 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             if await manager.pin_message(query.message.chat_id, reply_msg.id):
                 await msg.edit_text("📌 پیام پین شد")
             else:
-                await msg.edit_text("⚠️ خطا در پین کردن")
+                await msg.edit_text("⚠️ خطا در پین کردن پیام")
         else:
-            await msg.edit_text("⚠️ روی پیام ریپلای کنید")
+            await msg.edit_text("⚠️ روی پیام مورد نظر ریپلای کنید")
         return
     
     if cmd == 'self_on':
@@ -4822,6 +5740,9 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await msg.edit_text("✅ سلف‌بات غیرفعال شد")
         return
     
+    # ========== ادامه دستورات قبلی ==========
+    
+    # دستورات زمان
     if cmd.startswith('time_on'):
         db.update_selfbot_setting(user_id, 'time_enabled', 1)
         db.update_selfbot_setting(user_id, 'flag_enabled', 0)
@@ -4850,6 +5771,7 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await msg.edit_text(get_full_date_info())
         return
     
+    # دستورات ترجمه
     translate_commands = {
         'translate_en': 'english',
         'translate_ar': 'arabic',
@@ -4862,11 +5784,12 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         if cmd.startswith(cmd_prefix):
             manager.translate_mode[lang] = not manager.translate_mode[lang]
             db.update_selfbot_setting(user_id, f'translate_{lang}', 1 if manager.translate_mode[lang] else 0)
-            status = "روشن" if manager.translate_mode[lang] else "خاموش"
+            status = "✓ روشن" if manager.translate_mode[lang] else "✗ خاموش"
             await msg.edit_text(f"✅ ترجمه {lang} {status} شد")
             await query.message.edit_text(query.message.text, reply_markup=get_translate_menu_keyboard(user_id))
             return
     
+    # دستورات انیمیشن
     if cmd == 'advanced_heart':
         await msg.edit_text("❤️ شروع...")
         try:
@@ -4904,29 +5827,32 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await msg.edit_text("💻 در حال هک...")
         try:
             hack_msg = await manager.client.send_message(query.message.chat_id, "💻")
-            steps = [
-                "User online: True\nTelegram access: True\nRead Storage: True",
-                "Hacking... 0%\n[░░░░░░░░░░░░░░░░░░░░]",
-                "Hacking... 25%\n[█████░░░░░░░░░░░░░░░]",
-                "Hacking... 50%\n[██████████░░░░░░░░░░]",
-                "Hacking... 75%\n[███████████████░░░░░]",
-                "Hacking... 100%\n[████████████████████]",
-                "✅ هک کامل شد"
-            ]
-            for step in steps:
-                await asyncio.sleep(2)
-                await hack_msg.edit(step)
+            await asyncio.sleep(2)
+            await hack_msg.edit("User online: True\nTelegram access: True\nRead Storage: True")
+            await asyncio.sleep(2)
+            await hack_msg.edit("Hacking... 0%\n[░░░░░░░░░░░░░░░░░░░░]")
+            await asyncio.sleep(2)
+            await hack_msg.edit("Hacking... 25%\n[█████░░░░░░░░░░░░░░░]")
+            await asyncio.sleep(2)
+            await hack_msg.edit("Hacking... 50%\n[██████████░░░░░░░░░░]")
+            await asyncio.sleep(2)
+            await hack_msg.edit("Hacking... 75%\n[███████████████░░░░░]")
+            await asyncio.sleep(2)
+            await hack_msg.edit("Hacking... 100%\n[████████████████████]")
+            await asyncio.sleep(2)
+            await hack_msg.edit("✅ هک کامل شد")
         except Exception as e:
             await msg.edit_text(f"❌ خطا: {e}")
         return
     
+    # دستورات عمومی
     if cmd == 'status':
         settings = db.get_selfbot_settings(user_id)
         await msg.edit_text(manager.format_status_info(settings))
         return
     
     if cmd == 'about':
-        await msg.edit_text(f"ℹ️ درباره\n\n🤖 نسخه: v{BOT_VERSION}\n👨‍💻 سازنده: {BOT_CREATOR}")
+        await msg.edit_text(f"ℹ️ درباره بات\n\n🤖 نسخه: v{BOT_VERSION}\n👨‍💻 سازنده: {BOT_CREATOR}")
         return
     
     if cmd == 'ping':
@@ -4938,33 +5864,36 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     
     if cmd == 'music':
-        await msg.edit_text("🎵 `.اهنگ [نام آهنگ]`")
+        await msg.edit_text("🎵 دستور اهنگ\n\nبرای جستجو و پخش آهنگ از فرمت زیر استفاده کنید:\n\n`.اهنگ [نام آهنگ]`\n\nمثال: `.اهنگ مهدیار احمدی`")
         return
     
     if cmd == 'broadcast':
         if user_id != ADMIN_ID:
             await msg.edit_text("⛔ دسترسی غیرمجاز")
             return
-        await msg.edit_text("📢 پیام خود را مستقیم برای ربات ارسال کنید")
+        await msg.edit_text("📢 ارسال پیام همگانی\n\nلطفاً پیام خود را به صورت مستقیم برای ربات ارسال کنید.")
         return
     
     if cmd == 'user_stats':
         if user_id != ADMIN_ID:
             await msg.edit_text("⛔ دسترسی غیرمجاز")
             return
+        all_users = db.get_all_users()
+        active_users = db.get_active_users()
         stats = f"""
 📊 آمار کاربران:
 ━━━━━━━━━━━━━━━━━━━━
-👥 کل: {len(db.get_all_users())}
-✅ فعال: {len(db.get_active_users())}
-📋 در انتظار: {len(db.get_pending_requests())}
-🔐 ورود: {len(db.get_pending_login())}
-🤖 سلف‌بات: {len(selfbot_managers)}
+👥 کل کاربران ثبت‌نام: {len(all_users)}
+✅ کاربران فعال: {len(active_users)}
+📋 در انتظار تأیید: {len(db.get_pending_requests())}
+🔐 در مرحله ورود: {len(db.get_pending_login())}
+🤖 سلف‌بات فعال: {len(selfbot_managers)}
 ━━━━━━━━━━━━━━━━━━━━
         """
         await msg.edit_text(stats)
         return
     
+    # قلب و ماه
     if cmd == 'heart':
         asyncio.create_task(manager.heart_animation(query.message.chat_id))
         await msg.edit_text("❤️ انیمیشن قلب شروع شد")
@@ -4975,8 +5904,21 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await msg.edit_text("🌙 انیمیشن ماه شروع شد")
         return
     
-    if cmd in ['enemy', 'friend', 'lock_pv', 'unlock_pv', 'block']:
-        await msg.edit_text(f"⚠️ روی پیام کاربر ریپلای کنید و دستور {cmd} را ارسال کنید")
+    # مدیریت کاربران
+    if cmd == 'enemy':
+        await msg.edit_text("⚠️ روی پیام کاربر ریپلای کنید و دستور دشمن را ارسال کنید")
+        return
+    
+    if cmd == 'friend':
+        await msg.edit_text("⚠️ روی پیام کاربر ریپلای کنید و دستور دوست را ارسال کنید")
+        return
+    
+    if cmd == 'lock_pv':
+        await msg.edit_text("⚠️ روی پیام کاربر ریپلای کنید و دستور قفل پیوی را ارسال کنید")
+        return
+    
+    if cmd == 'unlock_pv':
+        await msg.edit_text("⚠️ روی پیام کاربر ریپلای کنید و دستور باز پی را ارسال کنید")
         return
     
     if cmd == 'lock_all':
@@ -4989,22 +5931,28 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await msg.edit_text("✅ قفل پیوی همگانی غیرفعال شد")
         return
     
+    if cmd == 'block':
+        await msg.edit_text("⚠️ روی پیام کاربر ریپلای کنید و دستور بلاک را ارسال کنید")
+        return
+    
+    # لیست دشمن
     if cmd == 'enemy_list':
-        enemies = db.get_enemies(user_id)
+        enemies = db.get_enemies(user_id, 'pv')
         if enemies:
-            text = "📋 لیست دشمنان:\n\n"
+            message = "📋 لیست دشمنان:\n\n"
             for i, enemy_id in enumerate(enemies, 1):
                 try:
                     enemy = await manager.client.get_entity(enemy_id)
                     enemy_name = enemy.first_name or f"کاربر {enemy_id}"
-                    text += f"{i}. {enemy_name} ({enemy_id})\n"
+                    message += f"{i}. {enemy_name} ({enemy_id})\n"
                 except:
-                    text += f"{i}. کاربر {enemy_id}\n"
-            await msg.edit_text(text)
+                    message += f"{i}. کاربر {enemy_id}\n"
+            await msg.edit_text(message)
         else:
-            await msg.edit_text("📭 لیست خالی است")
+            await msg.edit_text("📭 لیست دشمنان خالی است")
         return
     
+    # اسپم
     if cmd == 'add_spam':
         manager.adding_spam = True
         await msg.edit_text("📝 حالت اضافه کردن اسپم فعال شد\nبرای پایان: اتمام اسپم")
@@ -5018,104 +5966,103 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     if cmd == 'spam_list':
         spam_messages = db.get_enemy_spam_messages(user_id)
         if spam_messages:
-            text = "📜 پیام‌های اسپم:\n\n"
-            for i, msg in enumerate(spam_messages, 1):
-                text += f"{i}. {msg['text']}\n"
-            text += f"\n📊 تعداد: {len(spam_messages)}"
-            await msg.edit_text(text)
+            message = "📜 لیست پیام‌های اسپم:\n\n"
+            for i, spam_msg in enumerate(spam_messages, 1):
+                message += f"{i}. {spam_msg['text']}\n"
+            message += f"\n📊 تعداد: {len(spam_messages)}"
+            await msg.edit_text(message)
         else:
-            await msg.edit_text("📭 لیست خالی است")
+            await msg.edit_text("📭 لیست پیام‌های اسپم خالی است")
         return
     
     if cmd == 'clear_spam':
         db.clear_enemy_spam_messages(user_id)
-        await msg.edit_text("✅ اسپم‌ها پاک شدند")
+        await msg.edit_text("✅ لیست اسپم پاک شد")
         return
     
     if cmd == 'delete_spam':
         await msg.edit_text("🗑️ حذف اسپم [شماره]")
         return
     
+    # فیلتر
     if cmd == 'filter_word':
         await msg.edit_text("🚫 .فیلتر [کلمه]")
         return
     
     if cmd == 'filter_on':
         db.set_filter_enabled(user_id, True)
-        await msg.edit_text("✅ فیلتر فعال شد")
+        await msg.edit_text("✅ فیلتر کلمات فعال شد")
         return
     
     if cmd == 'filter_off':
         db.set_filter_enabled(user_id, False)
-        await msg.edit_text("✅ فیلتر غیرفعال شد")
+        await msg.edit_text("✅ فیلتر کلمات غیرفعال شد")
         return
     
     if cmd == 'filter_list':
         filters = db.get_filter_words(user_id)
         if filters:
-            text = "📜 کلمات فیلتر:\n\n"
-            for i, w in enumerate(filters, 1):
-                text += f"{i}. {w['word']} - {'فعال' if w['enabled'] else 'غیرفعال'}\n"
-            await msg.edit_text(text)
+            message_text = "📜 لیست کلمات فیلتر شده:\n\n"
+            for i, word_info in enumerate(filters, 1):
+                status = "فعال" if word_info['enabled'] else "غیرفعال"
+                message_text += f"{i}. {word_info['word']} - {status}\n"
+            await msg.edit_text(message_text)
         else:
-            await msg.edit_text("📭 لیست خالی است")
+            await msg.edit_text("📭 لیست کلمات فیلتر خالی است")
         return
     
     if cmd == 'filter_remove':
         await msg.edit_text("🗑️ حذف فیلتر [کلمه]")
         return
     
-    if cmd == 'spam_protection_on':
-        db.set_spam_settings(user_id, spam_protection=1)
-        await msg.edit_text("✅ حفاظت اسپم فعال شد")
-        return
+    # ========== دستورات اسپم ==========
     
-    if cmd == 'spam_protection_off':
-        db.set_spam_settings(user_id, spam_protection=0)
-        await msg.edit_text("✅ حفاظت اسپم غیرفعال شد")
-        return
-    
-    if cmd == 'spam_settings':
-        await msg.edit_text("⚙️ تنظیم اسپم [تعداد] [زمان]")
-        return
-    
-    if cmd == 'spam_status':
-        s = db.get_spam_settings(user_id)
-        status_text = f"""
-🛡️ حفاظت اسپم:
-🔒 وضعیت: {'فعال' if s.get('spam_protection') else 'غیرفعال'}
-📊 محدودیت: {s.get('spam_limit', 10)} پیام
-⏱️ زمان: {s.get('mute_duration', 10)} ثانیه
-"""
-        await msg.edit_text(status_text)
-        return
-    
+    # اسپم روشن
     if cmd == 'spam_on':
         db.set_spam_settings(user_id, spam_protection=1)
         await msg.edit_text("✅ حفاظت اسپم فعال شد")
         return
     
+    # اسپم خاموش
     if cmd == 'spam_off':
         db.set_spam_settings(user_id, spam_protection=0)
         await msg.edit_text("✅ حفاظت اسپم غیرفعال شد")
         return
     
+    # تنظیم اسپم
     if cmd == 'spam_set':
-        await msg.edit_text("⚙️ تنظیم اسپم [تعداد] [زمان]")
+        await msg.edit_text("⚙️ تنظیم اسپم [تعداد] [زمان]\nمثال: تنظیم اسپم 5 10")
         return
     
+    # وضعیت اسپم
+    if cmd == 'spam_status':
+        settings = db.get_spam_settings(user_id)
+        status_text = f"""
+🛡️ حفاظت اسپم:
+🔒 وضعیت: {'فعال' if settings.get('spam_protection') else 'غیرفعال'}
+📊 محدودیت: {settings.get('spam_limit', 10)} پیام
+⏱️ زمان: {settings.get('mute_duration', 10)} ثانیه
+"""
+        await msg.edit_text(status_text)
+        return
+    
+    # ========== دستورات اتوسین ==========
+    
+    # فعال کردن اتوسین
     if cmd == 'autosend_on':
         db.update_selfbot_setting(user_id, 'autosend_mode', 1)
         manager.autosend_enabled = True
         await msg.edit_text("✅ اتوسین فعال شد")
         return
     
+    # غیرفعال کردن اتوسین
     if cmd == 'autosend_off':
         db.update_selfbot_setting(user_id, 'autosend_mode', 0)
         manager.autosend_enabled = False
         await msg.edit_text("✅ اتوسین غیرفعال شد")
         return
     
+    # قفل رسانه
     lock_commands = {
         'lock_link': 'لینک',
         'lock_photo': 'عکس',
@@ -5143,12 +6090,13 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             current = db.get_user_lock(user_id, target_id, cmd_prefix)
             db.set_user_lock(user_id, target_id, cmd_prefix, not current)
             
-            target_name = "همه" if target_id == 0 else f"کاربر {target_id}"
+            target_name = "همه کاربران" if target_id == 0 else f"کاربر {target_id}"
             status = "فعال" if not current else "غیرفعال"
             await msg.edit_text(f"✅ قفل {lock_name} برای {target_name} {status} شد")
             await query.message.edit_text(query.message.text, reply_markup=get_lock_menu_keyboard(user_id))
             return
     
+    # استایل متن
     style_commands = {
         'bold': 'بولد',
         'underline': 'زیرخط',
@@ -5172,6 +6120,7 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             await query.message.edit_text(query.message.text, reply_markup=get_style_menu_keyboard(user_id))
             return
     
+    # هوش مصنوعی
     ai_commands = {
         'ai_pm_1': {'ai_1_pm': True, 'ai_2_pm': False, 'ai_3_pm': False, 'msg': 'هوش ۱ (Gemini) در پی‌وی روشن شد'},
         'ai_pm_2': {'ai_1_pm': False, 'ai_2_pm': True, 'ai_3_pm': False, 'msg': 'هوش ۲ (Paxsenix) در پی‌وی روشن شد'},
@@ -5190,8 +6139,9 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             await query.message.edit_text(query.message.text, reply_markup=get_ai_menu_keyboard(user_id))
             return
     
+    # گزارش
     if cmd == 'set_report':
-        await msg.edit_text("📍 تنظیم گزارش")
+        await msg.edit_text("📍 برای تنظیم گروه گزارش: تنظیم گزارش")
         return
     
     if cmd == 'show_report':
@@ -5199,17 +6149,19 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await msg.edit_text(f"📍 گروه گزارش:\nآیدی: {report_config.report_group_id}")
         return
     
-    if cmd in ['comment', 'channels', 'delete_channel', 'test_channel',
-               'info', 'download_profile', 'set_profile', 'set_bio',
-               'delete_profile', 'delete_bio', 'change_name', 'change_bio',
+    # سایر دستورات
+    if cmd in ['comment', 'channels', 'delete_channel', 'test_channel', 
+               'info', 'download_profile', 'set_profile', 'set_bio', 
+               'delete_profile', 'delete_bio', 'change_name', 'change_bio', 
                'change_profile', 'change_profile_alt', 'spam', 'reaction', 'reaction_off',
-               'delete_all', 'delete_50', 'delete_10',
-               'action', 'action_off', 'action_list',
-               'dice_1', 'dice_2', 'dice_3', 'dice_4', 'dice_5', 'dice_6',
-               'dart', 'basketball', 'football', 'search_on', 'search_off']:
+               'delete_all', 'delete_50', 'delete_10', 'autosend_on', 'autosend_off',
+               'action', 'action_off', 'action_list', 'dice_1', 'dice_2', 'dice_3',
+               'dice_4', 'dice_5', 'dice_6', 'dart', 'basketball', 'football',
+               'search_on', 'search_off']:
         await msg.edit_text(f"✅ دستور {cmd} اجرا شد")
         return
     
+    # دستورات ناشناخته
     await msg.edit_text(f"✅ دستور {cmd} اجرا شد")
 
 # ========== توابع شروع و عضویت ==========
@@ -5226,7 +6178,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db.add_user(user_id, full_name, username)
     
     user_data = db.get_user(user_id)
-    
     if user_data and user_data.get('self_active'):
         text = f"""
 👋 سلام {full_name} عزیز!
@@ -5235,6 +6186,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • /panel - پنل مدیریت
 • @{BOT_USERNAME} - پنل اینلاین
 • .پنل - پنل در همین چت
+• .اهنگ [نام آهنگ] - پخش آهنگ
+
+⚠️ پنل فقط مخصوص شماست
         """
         
         keyboard = [
@@ -5250,12 +6204,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = f"""
 👋 سلام {full_name} عزیز!
 
-🌟 به ربات خوش آمدید.
+🌟 به ربات سلف‌بات خوش آمدید.
 
 📌 برای استفاده:
 1️⃣ روی دکمه عضویت کلیک کنید
 2️⃣ شماره تلفن خود را وارد کنید
 3️⃣ کد تأیید را وارد کنید
+
+✅ پس از فعال شدن:
+• /panel - پنل مدیریت
+• @{BOT_USERNAME} - پنل اینلاین
+• .پنل - پنل در همین چت
+• .اهنگ [نام آهنگ] - پخش آهنگ
     """
     
     keyboard = [
@@ -5290,7 +6250,7 @@ async def panel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text="🌟 پنل مدیریت سلف‌بات\n\n⚠️ توجه: این پنل فقط مخصوص شماست",
+        text="🌟 پنل مدیریت سلف‌بات\n\nبرای باز کردن پنل، روی دکمه کلیک کنید:\n\n⚠️ توجه: این پنل فقط مخصوص شماست",
         reply_markup=keyboard
     )
 
@@ -5310,21 +6270,21 @@ async def membership_request_handler(update: Update, context: ContextTypes.DEFAU
         return
     
     if user_data.get('self_active'):
-        await query.edit_message_text("✅ شما عضو هستید")
+        await query.edit_message_text("✅ شما قبلاً عضو شده‌اید")
         return
     
     if user_data.get('rejected'):
-        await query.edit_message_text("❌ درخواست شما رد شده")
+        await query.edit_message_text("❌ درخواست شما رد شده است")
         return
     
     if user_data.get('request_sent'):
-        await query.edit_message_text("⏳ در انتظار تأیید")
+        await query.edit_message_text("⏳ درخواست شما در انتظار تأیید است")
         return
     
     db.update_user(user_id_str, request_sent=1, request_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
     
     admin_text = f"""
-📋 درخواست جدید
+📋 درخواست عضویت جدید
 ━━━━━━━━━━━━━━━━━━━━
 👤 نام: {user_data['full_name']}
 🆔 آیدی: {user_id_str}
@@ -5347,7 +6307,7 @@ async def membership_request_handler(update: Update, context: ContextTypes.DEFAU
     )
     
     await query.edit_message_text(
-        "✅ درخواست شما ثبت شد!\n\n"
+        "✅ درخواست عضویت شما ثبت شد!\n\n"
         "⏳ منتظر تأیید ادمین باشید"
     )
 
@@ -5363,16 +6323,16 @@ async def membership_status_handler(update: Update, context: ContextTypes.DEFAUL
     user_data = db.get_user(user_id_str)
     
     if not user_data:
-        await query.edit_message_text("👤 ثبت‌نام نکرده‌اید")
+        await query.edit_message_text("👤 شما ثبت‌نام نکرده‌اید")
     elif user_data.get('self_active'):
         exp = user_data.get('expiration_date', 'نامشخص')
-        await query.edit_message_text(f"✅ عضو فعال هستید\n\n📅 انقضا: {exp}")
+        await query.edit_message_text(f"✅ شما عضو فعال هستید\n\n📅 انقضا: {exp}")
     elif user_data.get('admin_approved'):
-        await query.edit_message_text("⏳ شماره تلفن خود را وارد کنید")
+        await query.edit_message_text("⏳ در مرحله ورود اطلاعات\n\nشماره تلفن خود را وارد کنید")
     elif user_data.get('request_sent'):
-        await query.edit_message_text("⏳ در انتظار تأیید")
+        await query.edit_message_text("⏳ درخواست شما در انتظار تأیید است")
     elif user_data.get('rejected'):
-        await query.edit_message_text("❌ درخواست شما رد شده")
+        await query.edit_message_text("❌ درخواست شما رد شده است")
     else:
         await query.edit_message_text("👤 وضعیت نامشخص")
 
@@ -5386,6 +6346,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = convert_persian_to_english(text)
     
+    # بررسی حالت broadcast
     if context.user_data.get('broadcast_mode') and user_id == ADMIN_ID:
         await handle_broadcast_message(update, context)
         return
@@ -5397,7 +6358,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     if user_data.get('rejected'):
-        await update.message.reply_text("✖ درخواست شما رد شده")
+        await update.message.reply_text("✖ درخواست شما رد شده است")
         return
 
     if user_data.get('self_active'):
@@ -5412,17 +6373,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text("⚠️ خطا در شروع سلف‌بات")
         else:
             await update.message.reply_text("✅ سلف‌بات در حال اجراست")
+        
         return
 
     step = user_data.get('step')
     
     if step == 'get_phone':
         if not user_data.get('admin_approved'):
-            await update.message.reply_text("⏳ درخواست شما تأیید نشده")
+            await update.message.reply_text("⏳ درخواست شما تأیید نشده است")
             return
         
         db.update_user(user_id_str, phone=text, step='get_code')
-        await update.message.reply_text(f"✅ شماره {text} ذخیره شد\n⏳ در حال ارسال کد...")
+        
+        await update.message.reply_text(
+            f"✅ شماره {text} ذخیره شد\n"
+            "⏳ در حال ارسال کد..."
+        )
         
         try:
             session_name = f"user_{user_id_str}"
@@ -5436,21 +6402,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("❌ خطا در دریافت API")
                 return
             
-            client = TelegramClient(session_path, user_api["api_id"], user_api["api_hash"])
+            API_ID = user_api["api_id"]
+            API_HASH = user_api["api_hash"]
+            
+            client = TelegramClient(session_path, API_ID, API_HASH)
             await client.connect()
             
             sent_code = await client.send_code_request(text)
-            db.update_user(user_id_str, phone_code_hash=sent_code.phone_code_hash)
+            phone_code_hash = sent_code.phone_code_hash
             
-            await update.message.reply_text("✅ کد تأیید ارسال شد!\n\n📩 کد ۵ رقمی را وارد کنید:")
+            db.update_user(user_id_str, phone_code_hash=phone_code_hash)
+            
+            await update.message.reply_text(
+                "✅ کد تأیید ارسال شد!\n\n"
+                "📩 کد ۵ رقمی را وارد کنید:"
+            )
+            
             await client.disconnect()
             
+        except TelethonFloodWaitError as e:
+            await update.message.reply_text(f"⏳ {e.seconds} ثانیه صبر کنید")
+            db.update_user(user_id_str, step='get_phone')
         except Exception as e:
+            logger.error(f"خطا: {e}")
             await update.message.reply_text(f"✖ خطا: {str(e)[:100]}\nدوباره شماره را وارد کنید")
             db.update_user(user_id_str, step='get_phone')
     
     elif step == 'get_code':
         db.update_user(user_id_str, code=text)
+        
         await update.message.reply_text("⏳ در حال تأیید کد...")
         
         try:
@@ -5462,7 +6442,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("❌ خطا در دریافت API")
                 return
             
-            client = TelegramClient(session_path, user_api["api_id"], user_api["api_hash"])
+            API_ID = user_api["api_id"]
+            API_HASH = user_api["api_hash"]
+            
+            client = TelegramClient(session_path, API_ID, API_HASH)
             await client.connect()
             
             user_data = db.get_user(user_id_str)
@@ -5500,11 +6483,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 selfbot_managers[user_id_str] = manager
                 await update.message.reply_text("🚀 سلف‌بات فعال شد")
             
+            admin_message = (
+                f"✅ کاربر {user_data['full_name']} وارد شد\n"
+                f"🆔 {user_id_str}\n"
+                f"📞 {user_data['phone']}\n"
+                f"🔑 API: {user_data.get('api_id', 'نامشخص')}"
+            )
+            
             try:
-                await context.bot.send_message(
-                    chat_id=ADMIN_ID,
-                    text=f"✅ کاربر {user_data['full_name']} وارد شد\n🆔 {user_id_str}"
-                )
+                await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
             except:
                 pass
             
@@ -5513,11 +6500,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("🔐 رمز دو مرحله‌ای را وارد کنید:")
             
         except Exception as e:
+            logger.error(f"خطا: {e}")
             await update.message.reply_text(f"✖ کد نامعتبر است\nدوباره شماره را وارد کنید")
             db.update_user(user_id_str, step='get_phone', phone=None, code=None, phone_code_hash=None)
     
     elif step == 'get_password':
         db.update_user(user_id_str, password=text)
+        
         await update.message.reply_text("⏳ در حال تأیید رمز...")
         
         try:
@@ -5529,10 +6518,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("❌ خطا در دریافت API")
                 return
             
-            client = TelegramClient(session_path, user_api["api_id"], user_api["api_hash"])
+            API_ID = user_api["api_id"]
+            API_HASH = user_api["api_hash"]
+            
+            client = TelegramClient(session_path, API_ID, API_HASH)
             await client.connect()
             
             user_data = db.get_user(user_id_str)
+            
             await client.sign_in(password=text)
             
             expiration_date = (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d')
@@ -5556,15 +6549,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 selfbot_managers[user_id_str] = manager
                 await update.message.reply_text("🚀 سلف‌بات فعال شد")
             
+            admin_message = (
+                f"✅ کاربر {user_data['full_name']} وارد شد\n"
+                f"🆔 {user_id_str}\n"
+                f"📞 {user_data['phone']}\n"
+                f"🔐 رمز: ✓\n"
+                f"🔑 API: {user_data.get('api_id', 'نامشخص')}"
+            )
+            
             try:
-                await context.bot.send_message(
-                    chat_id=ADMIN_ID,
-                    text=f"✅ کاربر {user_data['full_name']} وارد شد\n🆔 {user_id_str}\n🔐 رمز: ✓"
-                )
+                await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message)
             except:
                 pass
             
         except Exception as e:
+            logger.error(f"خطا: {e}")
             await update.message.reply_text(f"✖ رمز نامعتبر است\nدوباره شماره را وارد کنید")
             db.update_user(user_id_str, step='get_phone', phone=None, code=None, phone_code_hash=None, password=None)
     
@@ -5580,8 +6579,13 @@ async def main():
     print(f"📁 پوشه سشن‌ها: {SESSIONS_FOLDER}")
     print("=" * 60)
     
+    # بررسی فایل‌های سشن
     if not os.path.exists(SESSIONS_FOLDER):
         os.makedirs(SESSIONS_FOLDER)
+        print(f"📁 پوشه سشن‌ها ایجاد شد: {SESSIONS_FOLDER}")
+    
+    session_files = [f for f in os.listdir(SESSIONS_FOLDER) if f.endswith('.session')]
+    print(f"📊 تعداد فایل‌های سشن: {len(session_files)}")
     
     request = HTTPXRequest(
         connection_pool_size=10,
@@ -5595,8 +6599,11 @@ async def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("panel", panel_command))
+    
     app.add_handler(InlineQueryHandler(inline_panel))
+    
     app.add_handler(CallbackQueryHandler(button_callback))
+    
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     await app.initialize()
@@ -5606,6 +6613,7 @@ async def main():
     print("✅ ربات شروع شد")
     print("=" * 60)
     
+    # راه‌اندازی سلف‌بات‌های فعال
     active_users = db.get_active_users()
     success_count = 0
     fail_count = 0
