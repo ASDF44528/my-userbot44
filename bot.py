@@ -169,12 +169,12 @@ classic_fonts = [
     "⓿❶❷❸❹❺❻❼❽❾",
     "🄀🄁🄂🄃🄄🄅🄆🄇🄈🄉",
     "🄞🄟🄠🄡🄢🄣🄤🄥🄦🄧🄨",
-    "０１２３４۵６７۸۹",
+    "０１２３４５６７８۹",
     "𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗",
     "𝟶𝟷𝟸𝟹𝟺𝟻𝟼𝟽𝟾𝟿",
     "𝟬𝟭𝟮𝟯𝟰𝟱𝟲𝟳𝟴𝟵",
     "𝟢𝟣𝟤𝟥𝟦𝟧𝟨𝟩𝟪𝟫",
-    "０１２３４５６۷۸۹",
+    "０１２３۴۵۶۷۸۹",
     "𝟘𝟙𝟚𝟛𝟜𝟝𝟞𝟟𝟠𝟡",
     "𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗",
     "𝟶𝟷𝟸𝟹𝟺𝟻𝟼𝟽𝟾𝟿",
@@ -1925,7 +1925,20 @@ class SelfBotManager:
                 await self.client.send_message(event.chat_id, "⚠️ هیچ پیامی یافت نشد")
             return
         
-        # ========== دستورات حفاظت اسپم ==========
+        # ========== دستورات حفاظت اسپم (تنظیمات) ==========
+        if cmd == 'تنظیم' and args and args[0] == 'اسپم' and len(args) == 3:
+            try:
+                limit = int(args[1])
+                duration = int(args[2])
+                if limit > 0 and duration > 0:
+                    db.set_spam_settings(self.user_id, spam_limit=limit, mute_duration=duration)
+                    await event.edit(f"✅ تنظیمات اسپم بروزرسانی شد\n📊 محدودیت: {limit} پیام\n⏱️ مدت زمان: {duration} ثانیه")
+                else:
+                    await event.edit("❌ تعداد و زمان باید مثبت باشند")
+            except:
+                await event.edit("❌ فرمت نامعتبر\nمثال: تنظیم اسپم 5 10")
+            return
+        
         if cmd == 'اسپم' and args:
             sub_cmd = args[0]
             
@@ -1950,18 +1963,21 @@ class SelfBotManager:
                 await event.edit(status_text)
                 return
             
-            if sub_cmd == 'تنظیم' and len(args) == 3:
+            # ========== اسپم ارسال (اگر آرگومان اول عدد باشد) ==========
+            if args[0].isdigit() and len(args) >= 2:
                 try:
-                    limit = int(args[1])
-                    duration = int(args[2])
-                    if limit > 0 and duration > 0:
-                        db.set_spam_settings(self.user_id, spam_limit=limit, mute_duration=duration)
-                        await event.edit(f"✅ تنظیمات اسپم بروزرسانی شد\n📊 محدودیت: {limit} پیام\n⏱️ مدت زمان: {duration} ثانیه")
-                    else:
-                        await event.edit("❌ تعداد و زمان باید مثبت باشند")
+                    num = int(args[0])
+                    message_text = ' '.join(args[1:])
+                    await event.delete()
+                    for _ in range(num):
+                        await self.client.send_message(event.chat_id, message_text)
+                        await asyncio.sleep(0.05)
+                    report_msg = await self.client.send_message(event.chat_id, f"✅ {num} پیام اسپم ارسال شد")
+                    await asyncio.sleep(2)
+                    await report_msg.delete()
                 except:
-                    await event.edit("❌ فرمت نامعتبر\nمثال: اسپم تنظیم 5 10")
-            return
+                    await event.edit("❌ فرمت نامعتبر\nمثال: اسپم 5 سلام")
+                return
         
         # ========== دستورات زمان ==========
         
@@ -2061,7 +2077,7 @@ class SelfBotManager:
                 await event.edit("❌ لطفاً یک کلمه وارد کنید")
             return
         
-        # ========== دستورات قفل رسانه ==========
+        # ========== دستورات قفل رسانه (با پشتیبانی از فاصله) ==========
         lock_commands = {
             'لینک': 'lock_link',
             'عکس': 'lock_photo',
@@ -2079,6 +2095,7 @@ class SelfBotManager:
         }
         
         for lock_name, lock_type in lock_commands.items():
+            # بدون فاصله: قفللینک
             if cmd == f'قفل{lock_name}' and args and args[0] in ['روشن', 'خاموش'] and len(args) == 1:
                 target_id = 0
                 if event.is_reply:
@@ -2088,6 +2105,24 @@ class SelfBotManager:
                     target_id = event.message.peer_id.user_id
                 
                 if args[0] == 'روشن':
+                    db.set_user_lock(self.user_id, target_id, lock_type, True)
+                    target_name = "همه کاربران" if target_id == 0 else f"کاربر {target_id}"
+                    await event.edit(f"✅ قفل {lock_name} برای {target_name} فعال شد")
+                else:
+                    db.set_user_lock(self.user_id, target_id, lock_type, False)
+                    target_name = "همه کاربران" if target_id == 0 else f"کاربر {target_id}"
+                    await event.edit(f"✅ قفل {lock_name} برای {target_name} غیرفعال شد")
+                return
+            # با فاصله: قفل لینک
+            elif cmd == 'قفل' and args and len(args) >= 2 and args[0] == lock_name and args[1] in ['روشن', 'خاموش'] and len(args) == 2:
+                target_id = 0
+                if event.is_reply:
+                    reply_msg = await event.get_reply_message()
+                    target_id = reply_msg.sender_id
+                elif isinstance(event.message.peer_id, PeerUser):
+                    target_id = event.message.peer_id.user_id
+                
+                if args[1] == 'روشن':
                     db.set_user_lock(self.user_id, target_id, lock_type, True)
                     target_name = "همه کاربران" if target_id == 0 else f"کاربر {target_id}"
                     await event.edit(f"✅ قفل {lock_name} برای {target_name} فعال شد")
@@ -2186,22 +2221,6 @@ class SelfBotManager:
                 await event.edit("✅ کاربر بلاک شد")
             else:
                 await event.edit("⚠️ فقط در پی‌وی")
-            return
-        
-        # ========== دستورات اسپم ارسال ==========
-        if cmd == 'اسپم' and len(args) >= 2 and args[0].isdigit():
-            try:
-                num = int(args[0])
-                message_text = ' '.join(args[1:])
-                await event.delete()
-                for _ in range(num):
-                    await self.client.send_message(event.chat_id, message_text)
-                    await asyncio.sleep(0.05)
-                report_msg = await self.client.send_message(event.chat_id, f"✅ {num} پیام اسپم ارسال شد")
-                await asyncio.sleep(2)
-                await report_msg.delete()
-            except:
-                await event.edit("❌ فرمت نامعتبر\nمثال: اسپم 5 سلام")
             return
         
         # ========== دستورات ریکت ==========
@@ -2430,11 +2449,12 @@ class SelfBotManager:
                 await event.edit(f"⚠️ پیام شماره {message_id} وجود ندارد")
             return
         
-        # ========== دستورات کامنت (بدون پیام تأیید) ==========
+        # ========== دستورات کامنت (بدون پیام تأیید و فقط برای کانال) ==========
         if cmd == 'کامنت' and args:
             comment_text = ' '.join(args)
             chat = await event.get_chat()
             chat_type = "کانال" if hasattr(chat, 'broadcast') and chat.broadcast else "گروه"
+            # ذخیره در دیتابیس
             db.set_auto_comment(
                 self.user_id,
                 chat.id,
@@ -2443,8 +2463,8 @@ class SelfBotManager:
                 chat_type,
                 getattr(chat, 'username', None)
             )
-            # حذف پیام تأیید - فقط ویرایش به متن تنظیم‌شده
-            await event.edit(f"متن کامنت تنظیم شد: {comment_text[:30]}...")  # فقط نمایش مختصر
+            # ویرایش پیام به جای ارسال پیام جدید
+            await event.edit(f"متن کامنت تنظیم شد: {comment_text[:30]}...")
             return
         
         if cmd == 'کانال‌ها' and not args:
@@ -3961,24 +3981,26 @@ async def inline_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not query:
         return
     user_id = query.from_user.id
-    # بررسی مجدد عضویت با خواندن تازه از دیتابیس
+    # بررسی دسترسی: اگر self_active=1 یا سلف‌بات فعال باشد، دسترسی دارد
     user_data = db.get_user(str(user_id))
-    if not user_data or not user_data.get('self_active'):
-        # اگر self_active 0 باشد، اما سشن فایل موجود باشد و کاربر در selfbot_managers باشد، اجازه دسترسی بدهیم
-        if str(user_id) in selfbot_managers and selfbot_managers[str(user_id)].running:
-            # اجازه دسترسی با وضعیت فعال
-            pass
-        else:
-            results = [
-                InlineQueryResultArticle(
-                    id=str(uuid.uuid4()),
-                    title="⛔ دسترسی محدود",
-                    description="شما عضو سرویس نیستید",
-                    input_message_content=InputTextMessageContent("⛔ شما به این پنل دسترسی ندارید\n\nبرای عضویت: /start")
-                )
-            ]
-            await query.answer(results, cache_time=1, is_personal=True)
-            return
+    has_access = False
+    if user_data and user_data.get('self_active'):
+        has_access = True
+    elif str(user_id) in selfbot_managers and selfbot_managers[str(user_id)].running:
+        has_access = True
+    
+    if not has_access:
+        results = [
+            InlineQueryResultArticle(
+                id=str(uuid.uuid4()),
+                title="⛔ دسترسی محدود",
+                description="شما عضو سرویس نیستید",
+                input_message_content=InputTextMessageContent("⛔ شما به این پنل دسترسی ندارید\n\nبرای عضویت: /start")
+            )
+        ]
+        await query.answer(results, cache_time=0, is_personal=True)  # cache_time=0 برای جلوگیری از کش
+        return
+    
     if not query.query:
         results = [
             InlineQueryResultArticle(
@@ -4046,7 +4068,7 @@ async def inline_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         ]])
                     )
                 )
-    await query.answer(results, cache_time=1, is_personal=True)
+    await query.answer(results, cache_time=0, is_personal=True)  # cache_time=0 برای جلوگیری از کش
 
 def get_main_panel_keyboard(user_id):
     keyboard = [
