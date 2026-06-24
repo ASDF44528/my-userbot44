@@ -116,7 +116,7 @@ def get_user_api(user_id):
 
 BOT_TOKEN = "8304449635:AAHTqMEke8e1z1ZeMdgkFJGD9gV8EWtmfVk"
 ADMIN_ID = 6443963679
-BOT_USERNAME = "Gap_5bot"
+BOT_USERNAME = "Gap_5_bot"
 MUSIC_BOT = "Gap_4_bot"
 
 # ========== پوشه سشن‌ها ==========
