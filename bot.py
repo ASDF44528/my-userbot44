@@ -1,4 +1,3 @@
-
 import os
 import sqlite3
 import logging
@@ -117,7 +116,7 @@ def get_user_api(user_id):
 
 BOT_TOKEN = "8304449635:AAHTqMEke8e1z1ZeMdgkFJGD9gV8EWtmfVk"
 ADMIN_ID = 6443963679
-BOT_USERNAME = "Gap_5_bot"
+BOT_USERNAME = "Gap_5bot"
 MUSIC_BOT = "Gap_4_bot"
 
 # ========== پوشه سشن‌ها ==========
@@ -170,12 +169,12 @@ classic_fonts = [
     "⓿❶❷❸❹❺❻❼❽❾",
     "🄀🄁🄂🄃🄄🄅🄆🄇🄈🄉",
     "🄞🄟🄠🄡🄢🄣🄤🄥🄦🄧🄨",
-    "０１２３４５６７８９",
+    "０１２３４۵６７۸۹",
     "𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗",
     "𝟶𝟷𝟸𝟹𝟺𝟻𝟼𝟽𝟾𝟿",
     "𝟬𝟭𝟮𝟯𝟰𝟱𝟲𝟳𝟴𝟵",
     "𝟢𝟣𝟤𝟥𝟦𝟧𝟨𝟩𝟪𝟫",
-    "０１２３４５６７۸۹",
+    "０１２３４５６۷۸۹",
     "𝟘𝟙𝟚𝟛𝟜𝟝𝟞𝟟𝟠𝟡",
     "𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗",
     "𝟶𝟷𝟸𝟹𝟺𝟻𝟼𝟽𝟾𝟿",
@@ -1494,7 +1493,8 @@ class SelfBotManager:
         self.spam_tasks = {}
         self.report_config = ReportConfig(user_id)
         self.adding_spam = False
-        self.spam_counters = {}
+        self.spam_counters = {}  # key: chat_id_sender_id, value: list of timestamps
+        self.mute_timestamps = {}  # key: chat_id_sender_id, value: mute_until timestamp
         self.current_chat_id = None
         self.active_actions = {}
         self.action_tasks = {}
@@ -2097,6 +2097,27 @@ class SelfBotManager:
                     await event.edit(f"✅ قفل {lock_name} برای {target_name} غیرفعال شد")
                 return
         
+        # ========== دستورات ترجمه ==========
+        translate_map = {
+            'انگلیسی': 'english',
+            'عربی': 'arabic',
+            'عبری': 'hebrew',
+            'روسی': 'russian',
+            'ترکی': 'turkish'
+        }
+        if cmd in translate_map and args:
+            lang = translate_map[cmd]
+            if args[0] == 'روشن' and len(args) == 1:
+                self.translate_mode[lang] = True
+                db.update_selfbot_setting(self.user_id, f'translate_{lang}', 1)
+                await event.edit(f"✅ ترجمه {cmd} فعال شد")
+                return
+            elif args[0] == 'خاموش' and len(args) == 1:
+                self.translate_mode[lang] = False
+                db.update_selfbot_setting(self.user_id, f'translate_{lang}', 0)
+                await event.edit(f"✅ ترجمه {cmd} غیرفعال شد")
+                return
+        
         # ========== دستورات دشمن و دوست ==========
         if cmd == 'دشمن' and not args:
             target_id = await get_target_user(event, self.client)
@@ -2167,7 +2188,7 @@ class SelfBotManager:
                 await event.edit("⚠️ فقط در پی‌وی")
             return
         
-        # ========== دستورات اسپم ==========
+        # ========== دستورات اسپم ارسال ==========
         if cmd == 'اسپم' and len(args) >= 2 and args[0].isdigit():
             try:
                 num = int(args[0])
@@ -2409,7 +2430,7 @@ class SelfBotManager:
                 await event.edit(f"⚠️ پیام شماره {message_id} وجود ندارد")
             return
         
-        # ========== دستورات کامنت ==========
+        # ========== دستورات کامنت (بدون پیام تأیید) ==========
         if cmd == 'کامنت' and args:
             comment_text = ' '.join(args)
             chat = await event.get_chat()
@@ -2422,7 +2443,8 @@ class SelfBotManager:
                 chat_type,
                 getattr(chat, 'username', None)
             )
-            await event.edit(f"✅ کامنت در {chat_type}: {chat.title}")
+            # حذف پیام تأیید - فقط ویرایش به متن تنظیم‌شده
+            await event.edit(f"متن کامنت تنظیم شد: {comment_text[:30]}...")  # فقط نمایش مختصر
             return
         
         if cmd == 'کانال‌ها' and not args:
@@ -2924,7 +2946,6 @@ class SelfBotManager:
             return
         
         # ========== اگر هیچ دستوری شناسایی نشد، هیچ کاری نکن ==========
-        # دیگر خطای "دستور شناسایی نشد" نمایش داده نمی‌شود
         return
     
     # ========== متدهای کمکی ==========
@@ -2953,23 +2974,29 @@ class SelfBotManager:
                 hijri_str = "محاسبه نشد"
                 hijri_num = "۱۴۴۸/۰۱/۰۸ (تقریبی)"
             
+            # محاسبه هفته و روز سال
+            day_of_year = now.timetuple().tm_yday
+            week_number = now.isocalendar()[1]
+            
             calendar_text = f"""
 ꕀꔚꨄꕣꕥ✺ღდ
-🕰 **ساعت تهران:** {time_str}
-⌚️ **فرمت ۱۲ ساعته:** {time_12}
-🌐 **منطقه زمانی:** Asia/Tehran
-📌 **روز هفته:** {persian_weekdays.get(weekday, weekday)}
+🕰 ساعت تهران: {time_str}
+⌚️ فرمت ۱۲ ساعته: {time_12}
+🌐 منطقه زمانی: Asia/Tehran
+📌 روز هفته: {persian_weekdays.get(weekday, weekday)}
+📅 هفته: {week_number} (هفته سال)
+📆 روز سال: {day_of_year}
 
 ╭─────── تقویم‌ها ───────╮
-│ 📅 **شمسی:** {jdate.year:04}/{jdate.month:02}/{jdate.day:02}
+│ 📅 شمسی: {jdate.year:04}/{jdate.month:02}/{jdate.day:02}
 │     {jdate.day} {jdate.strftime('%B')} {jdate.year}
-│ 🌍 **میلادی:** {gregorian_date.year}/{gregorian_date.month:02}/{gregorian_date.day:02}
+│ 🌍 میلادی: {gregorian_date.year}/{gregorian_date.month:02}/{gregorian_date.day:02}
 │     {gregorian_date.strftime('%d %B %Y')}
-│ 🌙 **قمری:** {hijri_num}
+│ 🌙 قمری: {hijri_num}
 │     {hijri_str}
 ╰────────────────────────╯
 
-**خلاصه شیک:**
+خلاصه شیک:
 الان ساعت {time_str} است؛ تاریخ امروز در تقویم شمسی {jdate.year:04}/{jdate.month:02}/{jdate.day:02}، میلادی {gregorian_date.year}/{gregorian_date.month:02}/{gregorian_date.day:02} و قمری {hijri_num} می‌باشد.
 
 ⚠️ قمری: تقریبی، ممکن است با رؤیت هلال ۱ روز اختلاف داشته باشد
@@ -3368,6 +3395,8 @@ class SelfBotManager:
             chat_id = peer_id.chat_id
         else:
             return
+        
+        # ======== قفل پیوی ========
         if isinstance(event.message.peer_id, PeerUser) and not event.message.out:
             if settings.get('pv_lock_all'):
                 try:
@@ -3382,10 +3411,16 @@ class SelfBotManager:
                     return
                 except:
                     pass
+        
+        # ======== قفل رسانه ========
         if await self.handle_media_lock_delete(event):
             return
+        
+        # ======== کش کردن پیام ========
         if isinstance(event.message.peer_id, PeerUser) and not event.message.out and event.message.text:
             db.cache_message(self.user_id, chat_id, event.message.id, event.message.text)
+        
+        # ======== فیلتر کلمات ========
         if not event.message.out and event.message.text:
             if db.get_filter_enabled(self.user_id):
                 filter_words = db.get_filter_words(self.user_id)
@@ -3396,6 +3431,8 @@ class SelfBotManager:
                             return
                         except:
                             pass
+        
+        # ======== ریکت خودکار ========
         if isinstance(event.message.peer_id, PeerUser) and not event.message.out:
             sender_id = event.sender_id
             try:
@@ -3411,6 +3448,8 @@ class SelfBotManager:
                         logger.error(f"خطا در ارسال ریکت: {e}")
             except Exception as e:
                 logger.error(f"خطا در دریافت ریکت: {e}")
+        
+        # ======== هوش مصنوعی ========
         if isinstance(event.message.peer_id, PeerUser) and not event.message.out:
             sender_id = event.sender_id
             ai_status = settings.get('ai_status', {})
@@ -3437,22 +3476,43 @@ class SelfBotManager:
                         await event.reply("❌ خطا در ارتباط با هوش مصنوعی. لطفاً بعداً تلاش کنید.")
                 except Exception as e:
                     logger.error(f"خطا در پاسخ هوش مصنوعی: {e}")
+        
+        # ======== حفاظت اسپم (با سکوت) ========
         spam_settings = db.get_spam_settings(self.user_id)
         if spam_settings.get('spam_protection') and not event.message.out:
             sender_id = event.sender_id
             chat_key = f"{chat_id}_{sender_id}"
+            
+            # بررسی اینکه کاربر در حالت سکوت است یا خیر
+            mute_until = self.mute_timestamps.get(chat_key, 0)
+            if time.time() < mute_until:
+                try:
+                    await event.message.delete()
+                    return
+                except:
+                    pass
+            
+            # شمارش پیام‌ها
             if chat_key not in self.spam_counters:
                 self.spam_counters[chat_key] = []
             now = time.time()
-            self.spam_counters[chat_key].append(now)
             mute_duration = spam_settings.get('mute_duration', 10)
-            self.spam_counters[chat_key] = [t for t in self.spam_counters[chat_key] if now - t <= mute_duration]
             spam_limit = spam_settings.get('spam_limit', 10)
+            
+            # پاک کردن پیام‌های قدیمی
+            self.spam_counters[chat_key] = [t for t in self.spam_counters[chat_key] if now - t <= mute_duration]
+            self.spam_counters[chat_key].append(now)
+            
             if len(self.spam_counters[chat_key]) > spam_limit:
                 try:
                     await event.message.delete()
+                    # اعمال سکوت
+                    self.mute_timestamps[chat_key] = now + mute_duration
+                    logger.info(f"کاربر {sender_id} در چت {chat_id} به مدت {mute_duration} ثانیه سکوت شد")
                 except:
                     pass
+        
+        # ======== ذخیره کاربر در حافظه ========
         if isinstance(event.message.peer_id, PeerUser) and not event.message.out:
             sender_id = event.sender_id
             try:
@@ -3600,6 +3660,7 @@ class SelfBotManager:
             message = event.message
             if not message or message.out:
                 return
+            # فقط برای کانال‌ها (نه گروه)
             if not is_channel_post(message):
                 return
             chat = await message.get_chat()
@@ -3674,33 +3735,36 @@ class SelfBotManager:
     async def handle_outgoing_message(self, event):
         message_text = event.text or ""
         
-        # ========== اتوسین (اصلاح شده) ==========
-        if self.autosend_enabled and not message_text.startswith(('لیست', 'شروع', 'تایم', 'قلب', 'ماه', 'اطلاعات', 'دانلود', 'تاریخ', 'فعال', 'غیرفعال', 'حذف', 'ست', 'بولد', 'زیرخط', 'خط خورده', 'نقل قول', 'اسپویلر', 'کج', 'کد', 'پیش', 'اسپم', 'بلاک', 'ریکت', 'پیوی', 'گروه', 'درباره', 'من کی ام', 'قفل', 'باز', 'تنظیم', 'گروه گزارش', 'دشمن', 'دوست', 'کانال', 'کامنت', 'تست', 'لیست دشمن', 'لیست اسپم', 'پاک کردن اسپم', 'حذف اسپم', 'اضافه اسپم', 'اتمام اسپم', 'تغییر اسم', 'تغییر بیو', 'تغییر پروفایل', 'پروف', 'اسپم روشن', 'اسپم خاموش', 'پینگ', 'سرچ', 'خروج سرچ', 'قلب پیشرفته', 'عشق', 'سنتت', 'هک', 'وضعیت', '.پنل', 'پنل', '/panel', '.اهنگ', 'تنظیم اسپم', 'سلف روشن', 'سلف خاموش', 'پین', 'تگ ادمین', 'امار گپ', '.کد', 'تقویم', 'فونت')):
-            try:
-                # دریافت آخرین پیام دریافتی و سین کردن آن
-                last_incoming = None
-                async for msg in self.client.iter_messages(event.chat_id, limit=1):
-                    if msg.sender_id != self.my_id and not msg.out:
-                        last_incoming = msg
-                        break
-                if last_incoming:
-                    try:
-                        await self.client.send_read_acknowledge(event.chat_id, message=last_incoming)
-                        logger.debug(f"اتوسین: پیام {last_incoming.id} سین شد")
-                    except Exception as e:
-                        logger.debug(f"خطا در سین کردن پیام: {e}")
-                else:
-                    # اگر پیام دریافتی جدیدی نبود، همه پیام‌های خوانده نشده را سین کن
-                    try:
-                        await self.client.send_read_acknowledge(event.chat_id)
-                        logger.debug(f"اتوسین: همه پیام‌ها سین شدند")
-                    except Exception as e:
-                        logger.debug(f"خطا در سین کردن همه پیام‌ها: {e}")
-            except Exception as e:
-                logger.debug(f"خطا در اتوسین: {e}")
+        # ========== اتوسین (اصلاح شده - کارآمد) ==========
+        if self.autosend_enabled:
+            # لیست دستوراتی که نباید باعث سین شوند
+            skip_prefixes = ('لیست', 'شروع', 'تایم', 'قلب', 'ماه', 'اطلاعات', 'دانلود', 'تاریخ', 'فعال', 'غیرفعال', 'حذف', 'ست', 'بولد', 'زیرخط', 'خط خورده', 'نقل قول', 'اسپویلر', 'کج', 'کد', 'پیش', 'اسپم', 'بلاک', 'ریکت', 'پیوی', 'گروه', 'درباره', 'من کی ام', 'قفل', 'باز', 'تنظیم', 'گروه گزارش', 'دشمن', 'دوست', 'کانال', 'کامنت', 'تست', 'لیست دشمن', 'لیست اسپم', 'پاک کردن اسپم', 'حذف اسپم', 'اضافه اسپم', 'اتمام اسپم', 'تغییر اسم', 'تغییر بیو', 'تغییر پروفایل', 'پروف', 'اسپم روشن', 'اسپم خاموش', 'پینگ', 'سرچ', 'خروج سرچ', 'قلب پیشرفته', 'عشق', 'سنتت', 'هک', 'وضعیت', '.پنل', 'پنل', '/panel', '.اهنگ', 'تنظیم اسپم', 'سلف روشن', 'سلف خاموش', 'پین', 'تگ ادمین', 'امار گپ', '.کد', 'تقویم', 'فونت', 'انگلیسی', 'عربی', 'عبری', 'روسی', 'ترکی')
+            if not message_text.startswith(skip_prefixes):
+                try:
+                    # دریافت آخرین پیام دریافتی (غیر از خودمان)
+                    last_incoming = None
+                    async for msg in self.client.iter_messages(event.chat_id, limit=1):
+                        if msg.sender_id != self.my_id and not msg.out:
+                            last_incoming = msg
+                            break
+                    if last_incoming:
+                        try:
+                            await self.client.send_read_acknowledge(event.chat_id, message=last_incoming)
+                            logger.debug(f"اتوسین: پیام {last_incoming.id} سین شد")
+                        except Exception as e:
+                            logger.debug(f"خطا در سین کردن پیام: {e}")
+                    else:
+                        # اگر پیام دریافتی جدیدی نبود، همه پیام‌های خوانده نشده را سین کن
+                        try:
+                            await self.client.send_read_acknowledge(event.chat_id)
+                            logger.debug(f"اتوسین: همه پیام‌ها سین شدند")
+                        except Exception as e:
+                            logger.debug(f"خطا در سین کردن همه پیام‌ها: {e}")
+                except Exception as e:
+                    logger.debug(f"خطا در اتوسین: {e}")
         
         # ========== اضافه کردن اسپم ==========
-        if self.adding_spam and message_text and not message_text.startswith(('لیست', 'شروع', 'تایم', 'قلب', 'ماه', 'اطلاعات', 'دانلود', 'تاریخ', 'فعال', 'غیرفعال', 'حذف', 'ست', 'بولد', 'زیرخط', 'خط خورده', 'نقل قول', 'اسپویلر', 'کج', 'کد', 'پیش', 'اسپم', 'بلاک', 'ریکت', 'پیوی', 'گروه', 'درباره', 'من کی ام', 'قفل', 'باز', 'تنظیم', 'گروه گزارش', 'دشمن', 'دوست', 'کانال', 'کامنت', 'تست', 'لیست دشمن', 'لیست اسپم', 'پاک کردن اسپم', 'حذف اسپم', 'اضافه اسپم', 'اتمام اسپم', 'تغییر اسم', 'تغییر بیو', 'تغییر پروفایل', 'پروف', 'اسپم روشن', 'اسپم خاموش', 'پینگ', 'سرچ', 'خروج سرچ', 'قلب پیشرفته', 'عشق', 'سنتت', 'هک', 'وضعیت', '.پنل', 'پنل', '/panel', '.اهنگ', 'تنظیم اسپم', 'سلف روشن', 'سلف خاموش', 'پین', 'تگ ادمین', 'امار گپ', '.کد', 'تقویم', 'فونت')):
+        if self.adding_spam and message_text and not message_text.startswith(('لیست', 'شروع', 'تایم', 'قلب', 'ماه', 'اطلاعات', 'دانلود', 'تاریخ', 'فعال', 'غیرفعال', 'حذف', 'ست', 'بولد', 'زیرخط', 'خط خورده', 'نقل قول', 'اسپویلر', 'کج', 'کد', 'پیش', 'اسپم', 'بلاک', 'ریکت', 'پیوی', 'گروه', 'درباره', 'من کی ام', 'قفل', 'باز', 'تنظیم', 'گروه گزارش', 'دشمن', 'دوست', 'کانال', 'کامنت', 'تست', 'لیست دشمن', 'لیست اسپم', 'پاک کردن اسپم', 'حذف اسپم', 'اضافه اسپم', 'اتمام اسپم', 'تغییر اسم', 'تغییر بیو', 'تغییر پروفایل', 'پروف', 'اسپم روشن', 'اسپم خاموش', 'پینگ', 'سرچ', 'خروج سرچ', 'قلب پیشرفته', 'عشق', 'سنتت', 'هک', 'وضعیت', '.پنل', 'پنل', '/panel', '.اهنگ', 'تنظیم اسپم', 'سلف روشن', 'سلف خاموش', 'پین', 'تگ ادمین', 'امار گپ', '.کد', 'تقویم', 'فونت', 'انگلیسی', 'عربی', 'عبری', 'روسی', 'ترکی')):
             db.add_enemy_spam_message(self.user_id, message_text)
             try:
                 await event.delete()
@@ -3712,7 +3776,7 @@ class SelfBotManager:
         if event.text:
             settings = db.get_selfbot_settings(self.user_id)
             text_style = settings.get('text_style')
-            if text_style and not message_text.startswith(('لیست', 'شروع', 'تایم', 'قلب', 'ماه', 'اطلاعات', 'دانلود', 'تاریخ', 'فعال', 'غیرفعال', 'حذف', 'ست', 'بولد', 'زیرخط', 'خط خورده', 'نقل قول', 'اسپویلر', 'کج', 'کد', 'پیش', 'اسپم', 'بلاک', 'ریکت', 'پیوی', 'گروه', 'درباره', 'من کی ام', 'قفل', 'باز', 'تنظیم', 'گروه گزارش', 'دشمن', 'دوست', 'کانال', 'کامنت', 'تست', 'لیست دشمن', 'لیست اسپم', 'پاک کردن اسپم', 'حذف اسپم', 'اضافه اسپم', 'اتمام اسپم', 'تغییر اسم', 'تغییر بیو', 'تغییر پروفایل', 'پروف', 'اسپم روشن', 'اسپم خاموش', 'پینگ', 'سرچ', 'خروج سرچ', 'قلب پیشرفته', 'عشق', 'سنتت', 'هک', 'وضعیت', '.پنل', 'پنل', '/panel', '.اهنگ', 'تنظیم اسپم', 'سلف روشن', 'سلف خاموش', 'پین', 'تگ ادمین', 'امار گپ', '.کد', 'تقویم', 'فونت')):
+            if text_style and not message_text.startswith(('لیست', 'شروع', 'تایم', 'قلب', 'ماه', 'اطلاعات', 'دانلود', 'تاریخ', 'فعال', 'غیرفعال', 'حذف', 'ست', 'بولد', 'زیرخط', 'خط خورده', 'نقل قول', 'اسپویلر', 'کج', 'کد', 'پیش', 'اسپم', 'بلاک', 'ریکت', 'پیوی', 'گروه', 'درباره', 'من کی ام', 'قفل', 'باز', 'تنظیم', 'گروه گزارش', 'دشمن', 'دوست', 'کانال', 'کامنت', 'تست', 'لیست دشمن', 'لیست اسپم', 'پاک کردن اسپم', 'حذف اسپم', 'اضافه اسپم', 'اتمام اسپم', 'تغییر اسم', 'تغییر بیو', 'تغییر پروفایل', 'پروف', 'اسپم روشن', 'اسپم خاموش', 'پینگ', 'سرچ', 'خروج سرچ', 'قلب پیشرفته', 'عشق', 'سنتت', 'هک', 'وضعیت', '.پنل', 'پنل', '/panel', '.اهنگ', 'تنظیم اسپم', 'سلف روشن', 'سلف خاموش', 'پین', 'تگ ادمین', 'امار گپ', '.کد', 'تقویم', 'فونت', 'انگلیسی', 'عربی', 'عبری', 'روسی', 'ترکی')):
                 try:
                     text, entities = await apply_text_style(message_text, text_style)
                     if entities:
@@ -3721,7 +3785,7 @@ class SelfBotManager:
                     pass
         
         # ========== حالت سرچ ==========
-        if self.search_mode and message_text and not message_text.startswith(('لیست', 'شروع', 'تایم', 'قلب', 'ماه', 'اطلاعات', 'دانلود', 'تاریخ', 'فعال', 'غیرفعال', 'حذف', 'ست', 'بولد', 'زیرخط', 'خط خورده', 'نقل قول', 'اسپویلر', 'کج', 'کد', 'پیش', 'اسپم', 'بلاک', 'ریکت', 'پیوی', 'گروه', 'درباره', 'من کی ام', 'قفل', 'باز', 'تنظیم', 'گروه گزارش', 'دشمن', 'دوست', 'کانال', 'کامنت', 'تست', 'لیست دشمن', 'لیست اسپم', 'پاک کردن اسپم', 'حذف اسپم', 'اضافه اسپم', 'اتمام اسپم', 'تغییر اسم', 'تغییر بیو', 'تغییر پروفایل', 'پروف', 'اسپم روشن', 'اسپم خاموش', 'پینگ', 'سرچ', 'خروج سرچ', 'قلب پیشرفته', 'عشق', 'سنتت', 'هک', 'وضعیت', '.پنل', 'پنل', '/panel', '.اهنگ', 'تنظیم اسپم', 'سلف روشن', 'سلف خاموش', 'پین', 'تگ ادمین', 'امار گپ', '.کد', 'تقویم', 'فونت')):
+        if self.search_mode and message_text and not message_text.startswith(('لیست', 'شروع', 'تایم', 'قلب', 'ماه', 'اطلاعات', 'دانلود', 'تاریخ', 'فعال', 'غیرفعال', 'حذف', 'ست', 'بولد', 'زیرخط', 'خط خورده', 'نقل قول', 'اسپویلر', 'کج', 'کد', 'پیش', 'اسپم', 'بلاک', 'ریکت', 'پیوی', 'گروه', 'درباره', 'من کی ام', 'قفل', 'باز', 'تنظیم', 'گروه گزارش', 'دشمن', 'دوست', 'کانال', 'کامنت', 'تست', 'لیست دشمن', 'لیست اسپم', 'پاک کردن اسپم', 'حذف اسپم', 'اضافه اسپم', 'اتمام اسپم', 'تغییر اسم', 'تغییر بیو', 'تغییر پروفایل', 'پروف', 'اسپم روشن', 'اسپم خاموش', 'پینگ', 'سرچ', 'خروج سرچ', 'قلب پیشرفته', 'عشق', 'سنتت', 'هک', 'وضعیت', '.پنل', 'پنل', '/panel', '.اهنگ', 'تنظیم اسپم', 'سلف روشن', 'سلف خاموش', 'پین', 'تگ ادمین', 'امار گپ', '.کد', 'تقویم', 'فونت', 'انگلیسی', 'عربی', 'عبری', 'روسی', 'ترکی')):
             await self.handle_google_search(event, message_text)
             return
         
@@ -3897,18 +3961,24 @@ async def inline_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not query:
         return
     user_id = query.from_user.id
+    # بررسی مجدد عضویت با خواندن تازه از دیتابیس
     user_data = db.get_user(str(user_id))
     if not user_data or not user_data.get('self_active'):
-        results = [
-            InlineQueryResultArticle(
-                id=str(uuid.uuid4()),
-                title="⛔ دسترسی محدود",
-                description="شما عضو سرویس نیستید",
-                input_message_content=InputTextMessageContent("⛔ شما به این پنل دسترسی ندارید\n\nبرای عضویت: /start")
-            )
-        ]
-        await query.answer(results, cache_time=1, is_personal=True)
-        return
+        # اگر self_active 0 باشد، اما سشن فایل موجود باشد و کاربر در selfbot_managers باشد، اجازه دسترسی بدهیم
+        if str(user_id) in selfbot_managers and selfbot_managers[str(user_id)].running:
+            # اجازه دسترسی با وضعیت فعال
+            pass
+        else:
+            results = [
+                InlineQueryResultArticle(
+                    id=str(uuid.uuid4()),
+                    title="⛔ دسترسی محدود",
+                    description="شما عضو سرویس نیستید",
+                    input_message_content=InputTextMessageContent("⛔ شما به این پنل دسترسی ندارید\n\nبرای عضویت: /start")
+                )
+            ]
+            await query.answer(results, cache_time=1, is_personal=True)
+            return
     if not query.query:
         results = [
             InlineQueryResultArticle(
