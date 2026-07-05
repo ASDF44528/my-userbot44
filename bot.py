@@ -1,3 +1,4 @@
+
 import os
 import sys
 import sqlite3
@@ -168,7 +169,9 @@ def get_user_api(user_id):
     logger.info(f"API اختصاص یافته به کاربر {user_id}: {best_api['api_id']}")
     return best_api
 
-BOT_TOKEN = "8304449635:AAHTqMEke8e1z1ZeMdgkFJGD9gV8EWtmfVk"
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+if not BOT_TOKEN:
+    raise RuntimeError("متغیر محیطی BOT_TOKEN تنظیم نشده! توی Railway برو Variables و مقدار BOT_TOKEN رو با توکن جدیدت ست کن.")
 ADMIN_ID = 6443963679
 BOT_USERNAME = "Gap_5_bot"
 MUSIC_BOT = "Gap_4_bot"
@@ -1612,6 +1615,17 @@ async def get_ai_response(text, ai_type, user_id=None):
     except:
         pass
     return None
+
+COMMAND_KEYWORDS = ('لیست', 'شروع', 'تایم', 'قلب', 'ماه', 'اطلاعات', 'دانلود', 'تاریخ', 'فعال', 'غیرفعال', 'حذف', 'ست', 'بولد', 'زیرخط', 'خط خورده', 'نقل قول', 'اسپویلر', 'کج', 'کد', 'پیش', 'اسپم', 'بلاک', 'ریکت', 'پیوی', 'گروه', 'درباره', 'من کی ام', 'قفل', 'باز', 'تنظیم', 'گروه گزارش', 'دشمن', 'دوست', 'کانال', 'کامنت', 'تست', 'لیست دشمن', 'لیست اسپم', 'پاک کردن اسپم', 'حذف اسپم', 'اضافه اسپم', 'اتمام اسپم', 'تغییر اسم', 'تغییر بیو', 'تغییر پروفایل', 'پروف', 'اسپم روشن', 'اسپم خاموش', 'پینگ', 'سرچ', 'خروج سرچ', 'قلب پیشرفته', 'عشق', 'سنتت', 'هک', 'وضعیت', '.پنل', 'پنل', '/panel', '.اهنگ', 'تنظیم اسپم', 'سلف روشن', 'سلف خاموش', 'پین', 'تگ ادمین', 'امار گپ', '.کد', 'تقویم', 'فونت', 'انگلیسی', 'عربی', 'عبری', 'روسی', 'ترکی', 'اتوسین', 'تگ همه', 'لغو تگ', 'منشی', 'افزودن پاسخ', 'حذف پاسخ', 'لیست پاسخ', 'پاک کردن پاسخ‌ها', 'بولینگ', 'تاس', 'سه رنگ', 'شانس', 'تاریخ ساخت اکانت', 'نشست‌های فعال', 'اطلاعات سیستم', 'قیمت ارز', 'نرخ ارز', 'ریاضی', 'تبدیل ارز', 'استیکر متن', 'اسکرین‌شات', 'تشخیص متن', 'فرمول', 'ساعت در بیو', 'ساعت در بیو ۲', 'بیو تاریخ', 'بیو کامل', 'بیو عاشقانه')
+
+# نگاشت زبان‌های فارسی به کدهای استاندارد ISO که deep_translator تضمینی می‌شناسد
+TRANSLATE_LANG_CODES = {
+    'english': 'en',
+    'arabic': 'ar',
+    'hebrew': 'iw',
+    'russian': 'ru',
+    'turkish': 'tr',
+}
 
 async def apply_text_style(message_text, style):
     if not message_text or not style:
@@ -3096,8 +3110,11 @@ class SelfBotManager:
                     # ارسال ریکت روی پیام (گروه یا پیوی)
                     try:
                         msg_id = event.message.id
+                        # نکته مهم: در گروه/کانال باید InputPeer واقعی (با access_hash) گرفته بشه،
+                        # چون peer_id خام (PeerChat/PeerChannel) اغلب باعث می‌شه ریکت در گروه بی‌صدا fail بشه
+                        input_chat = await event.get_input_chat()
                         await self.client(SendReactionRequest(
-                            peer=event.message.peer_id,
+                            peer=input_chat,
                             msg_id=msg_id,
                             reaction=[ReactionEmoji(emoticon=emoji)]
                         ))
@@ -4334,8 +4351,10 @@ class SelfBotManager:
                 reaction = db.get_reaction(self.user_id, chat_id, sender_id)
                 if reaction and reaction in ALLOWED_EMOJIS:
                     try:
+                        # مثل بالا: از InputPeer واقعی چت استفاده می‌کنیم تا در گروه/کانال هم کار کند
+                        input_chat = await event.get_input_chat()
                         await self.client(SendReactionRequest(
-                            peer=event.message.peer_id,
+                            peer=input_chat,
                             msg_id=event.message.id,
                             reaction=[ReactionEmoji(emoticon=reaction)]
                         ))
@@ -4605,7 +4624,7 @@ class SelfBotManager:
     async def handle_outgoing_message(self, event):
         message_text = event.text or ""
         
-        if self.adding_spam and message_text and not message_text.startswith(('لیست', 'شروع', 'تایم', 'قلب', 'ماه', 'اطلاعات', 'دانلود', 'تاریخ', 'فعال', 'غیرفعال', 'حذف', 'ست', 'بولد', 'زیرخط', 'خط خورده', 'نقل قول', 'اسپویلر', 'کج', 'کد', 'پیش', 'اسپم', 'بلاک', 'ریکت', 'پیوی', 'گروه', 'درباره', 'من کی ام', 'قفل', 'باز', 'تنظیم', 'گروه گزارش', 'دشمن', 'دوست', 'کانال', 'کامنت', 'تست', 'لیست دشمن', 'لیست اسپم', 'پاک کردن اسپم', 'حذف اسپم', 'اضافه اسپم', 'اتمام اسپم', 'تغییر اسم', 'تغییر بیو', 'تغییر پروفایل', 'پروف', 'اسپم روشن', 'اسپم خاموش', 'پینگ', 'سرچ', 'خروج سرچ', 'قلب پیشرفته', 'عشق', 'سنتت', 'هک', 'وضعیت', '.پنل', 'پنل', '/panel', '.اهنگ', 'تنظیم اسپم', 'سلف روشن', 'سلف خاموش', 'پین', 'تگ ادمین', 'امار گپ', '.کد', 'تقویم', 'فونت', 'انگلیسی', 'عربی', 'عبری', 'روسی', 'ترکی', 'اتوسین', 'تگ همه', 'لغو تگ', 'منشی', 'افزودن پاسخ', 'حذف پاسخ', 'لیست پاسخ', 'پاک کردن پاسخ‌ها', 'بولینگ', 'تاس', 'سه رنگ', 'شانس', 'تاریخ ساخت اکانت', 'نشست‌های فعال', 'اطلاعات سیستم', 'قیمت ارز', 'نرخ ارز', 'ریاضی', 'تبدیل ارز', 'استیکر متن', 'اسکرین‌شات', 'تشخیص متن', 'فرمول', 'ساعت در بیو', 'ساعت در بیو ۲', 'بیو تاریخ', 'بیو کامل', 'بیو عاشقانه')):
+        if self.adding_spam and message_text and not message_text.startswith(COMMAND_KEYWORDS):
             db.add_enemy_spam_message(self.user_id, message_text)
             try:
                 await event.delete()
@@ -4616,7 +4635,7 @@ class SelfBotManager:
         if event.text:
             settings = db.get_selfbot_settings(self.user_id)
             text_style = settings.get('text_style')
-            if text_style and not message_text.startswith(('لیست', 'شروع', 'تایم', 'قلب', 'ماه', 'اطلاعات', 'دانلود', 'تاریخ', 'فعال', 'غیرفعال', 'حذف', 'ست', 'بولد', 'زیرخط', 'خط خورده', 'نقل قول', 'اسپویلر', 'کج', 'کد', 'پیش', 'اسپم', 'بلاک', 'ریکت', 'پیوی', 'گروه', 'درباره', 'من کی ام', 'قفل', 'باز', 'تنظیم', 'گروه گزارش', 'دشمن', 'دوست', 'کانال', 'کامنت', 'تست', 'لیست دشمن', 'لیست اسپم', 'پاک کردن اسپم', 'حذف اسپم', 'اضافه اسپم', 'اتمام اسپم', 'تغییر اسم', 'تغییر بیو', 'تغییر پروفایل', 'پروف', 'اسپم روشن', 'اسپم خاموش', 'پینگ', 'سرچ', 'خروج سرچ', 'قلب پیشرفته', 'عشق', 'سنتت', 'هک', 'وضعیت', '.پنل', 'پنل', '/panel', '.اهنگ', 'تنظیم اسپم', 'سلف روشن', 'سلف خاموش', 'پین', 'تگ ادمین', 'امار گپ', '.کد', 'تقویم', 'فونت', 'انگلیسی', 'عربی', 'عبری', 'روسی', 'ترکی', 'اتوسین', 'تگ همه', 'لغو تگ', 'منشی', 'افزودن پاسخ', 'حذف پاسخ', 'لیست پاسخ', 'پاک کردن پاسخ‌ها', 'بولینگ', 'تاس', 'سه رنگ', 'شانس', 'تاریخ ساخت اکانت', 'نشست‌های فعال', 'اطلاعات سیستم', 'قیمت ارز', 'نرخ ارز', 'ریاضی', 'تبدیل ارز', 'استیکر متن', 'اسکرین‌شات', 'تشخیص متن', 'فرمول', 'ساعت در بیو', 'ساعت در بیو ۲', 'بیو تاریخ', 'بیو کامل', 'بیو عاشقانه')):
+            if text_style and not message_text.startswith(COMMAND_KEYWORDS):
                 try:
                     text, entities = await apply_text_style(message_text, text_style)
                     if entities:
@@ -4624,15 +4643,15 @@ class SelfBotManager:
                 except:
                     pass
         
-        if self.search_mode and message_text and not message_text.startswith(('لیست', 'شروع', 'تایم', 'قلب', 'ماه', 'اطلاعات', 'دانلود', 'تاریخ', 'فعال', 'غیرفعال', 'حذف', 'ست', 'بولد', 'زیرخط', 'خط خورده', 'نقل قول', 'اسپویلر', 'کج', 'کد', 'پیش', 'اسپم', 'بلاک', 'ریکت', 'پیوی', 'گروه', 'درباره', 'من کی ام', 'قفل', 'باز', 'تنظیم', 'گروه گزارش', 'دشمن', 'دوست', 'کانال', 'کامنت', 'تست', 'لیست دشمن', 'لیست اسپم', 'پاک کردن اسپم', 'حذف اسپم', 'اضافه اسپم', 'اتمام اسپم', 'تغییر اسم', 'تغییر بیو', 'تغییر پروفایل', 'پروف', 'اسپم روشن', 'اسپم خاموش', 'پینگ', 'سرچ', 'خروج سرچ', 'قلب پیشرفته', 'عشق', 'سنتت', 'هک', 'وضعیت', '.پنل', 'پنل', '/panel', '.اهنگ', 'تنظیم اسپم', 'سلف روشن', 'سلف خاموش', 'پین', 'تگ ادمین', 'امار گپ', '.کد', 'تقویم', 'فونت', 'انگلیسی', 'عربی', 'عبری', 'روسی', 'ترکی', 'اتوسین', 'تگ همه', 'لغو تگ', 'منشی', 'افزودن پاسخ', 'حذف پاسخ', 'لیست پاسخ', 'پاک کردن پاسخ‌ها', 'بولینگ', 'تاس', 'سه رنگ', 'شانس', 'تاریخ ساخت اکانت', 'نشست‌های فعال', 'اطلاعات سیستم', 'قیمت ارز', 'نرخ ارز', 'ریاضی', 'تبدیل ارز', 'استیکر متن', 'اسکرین‌شات', 'تشخیص متن', 'فرمول', 'ساعت در بیو', 'ساعت در بیو ۲', 'بیو تاریخ', 'بیو کامل', 'بیو عاشقانه')):
+        if self.search_mode and message_text and not message_text.startswith(COMMAND_KEYWORDS):
             await self.handle_google_search(event, message_text)
             return
         
-        if event.text:
+        if event.text and not message_text.startswith(COMMAND_KEYWORDS):
             # ========== ترجمه - اصلاح شده ==========
             try:
                 translated_text = await self.translate_text(event.text)
-                if translated_text != event.text:
+                if translated_text and translated_text.strip() != event.text.strip():
                     try:
                         await event.edit(translated_text)
                     except Exception as e:
@@ -4647,19 +4666,26 @@ class SelfBotManager:
         try:
             from deep_translator import GoogleTranslator
         except Exception as e:
-            logger.error(f"خطا در import deep_translator: {e}")
+            logger.error(
+                "❌ کتابخانه deep_translator نصب نیست! "
+                "به requirements.txt خط 'deep-translator' رو اضافه کن و ری‌دیپلوی کن. "
+                f"جزئیات خطا: {e}"
+            )
             return text
         for lang, status in self.translate_mode.items():
             if status:
+                target_code = TRANSLATE_LANG_CODES.get(lang, lang)
                 try:
-                    result = GoogleTranslator(source='auto', target=lang).translate(text)
+                    result = await asyncio.to_thread(
+                        lambda: GoogleTranslator(source='auto', target=target_code).translate(text)
+                    )
                     if result:
                         return result
                     else:
-                        logger.warning(f"نتیجه ترجمه خالی بود برای زبان {lang}")
+                        logger.warning(f"نتیجه ترجمه خالی بود برای زبان {lang} ({target_code})")
                         return text
                 except Exception as e:
-                    logger.error(f"خطا در ترجمه به {lang}: {e}")
+                    logger.error(f"خطا در ترجمه به {lang} ({target_code}): {e}")
                     return text
         return text
     
