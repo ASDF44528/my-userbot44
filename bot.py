@@ -1414,10 +1414,20 @@ class MainDatabase:
                 cursor.execute("ALTER TABLE selfbot_settings ADD COLUMN selected_flags TEXT")
             except Exception:
                 pass
+        for col, typedef in [
+            ('profile_clock_enabled', 'BOOLEAN DEFAULT 0'),
+            ('profile_clock_color', "TEXT DEFAULT 'cyan'"),
+            ('profile_clock_backup', 'TEXT'),
+        ]:
+            if col not in sb_columns:
+                try:
+                    cursor.execute(f"ALTER TABLE selfbot_settings ADD COLUMN {col} {typedef}")
+                except Exception:
+                    pass
         
         conn.commit()
         conn.close()
-        logger.info("✓ دیتابیس اصلی ایجاد شد (و ستون‌های api_id و api_hash و selected_flags اضافه شدند)")
+        logger.info("✓ دیتابیس اصلی ایجاد شد (و ستون‌های api_id و api_hash و selected_flags و profile_clock اضافه شدند)")
     
     def add_user(self, user_id, full_name, username):
         conn = sqlite3.connect(self.db_name)
@@ -1576,6 +1586,9 @@ class MainDatabase:
                 'selected_flags': 'all',
                 'filter_enabled': 0,
                 'selfbot_enabled': 1,
+                'profile_clock_enabled': 0,
+                'profile_clock_color': 'cyan',
+                'profile_clock_backup': None,
                 'ai_status': {
                     'ai_1_pm': False,
                     'ai_2_pm': False,
@@ -1630,9 +1643,15 @@ class MainDatabase:
                 (value, user_id)
             )
         except sqlite3.OperationalError:
-            # ستون وجود ندارد — اضافه کن
+            # ستون وجود ندارد — اضافه کن (نوع مناسب)
             try:
-                cursor.execute(f'ALTER TABLE selfbot_settings ADD COLUMN {key} INTEGER DEFAULT 0')
+                if isinstance(value, str) or value is None:
+                    typedef = 'TEXT'
+                elif isinstance(value, float):
+                    typedef = 'REAL'
+                else:
+                    typedef = 'INTEGER DEFAULT 0'
+                cursor.execute(f'ALTER TABLE selfbot_settings ADD COLUMN {key} {typedef}')
                 cursor.execute(
                     f'UPDATE selfbot_settings SET {key} = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?',
                     (value, user_id)
@@ -2425,6 +2444,134 @@ def create_time():
 
 def create_time2():
     return get_now().strftime("%H:%M:%S")
+
+# ========== ساعت روی پروفایل (سایبرپانک) ==========
+PROFILE_CLOCK_COLORS = {
+    "cyan": (0, 255, 220),
+    "green": (0, 255, 120),
+    "purple": (180, 80, 255),
+    "pink": (255, 60, 180),
+    "orange": (255, 140, 40),
+    "red": (255, 40, 80),
+    "blue": (40, 140, 255),
+    "white": (230, 240, 255),
+}
+
+def compose_profile_clock_image(photo_path: str, color_name: str = "cyan", out_path: str = None) -> str:
+    """ساخت عکس پروفایل با ساعت سایبرپانک شبیه نمونه — خروجی مسیر PNG"""
+    import math, tempfile, time as _t
+    try:
+        from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
+    except Exception as e:
+        logger.error(f"compose_profile_clock PIL: {e}")
+        return None
+    try:
+        color = PROFILE_CLOCK_COLORS.get((color_name or "cyan").lower(), PROFILE_CLOCK_COLORS["cyan"])
+        size = 720
+        # بارگذاری و برش مربعی عکس کاربر
+        base = Image.open(photo_path).convert("RGBA")
+        w, h = base.size
+        side = min(w, h)
+        left = (w - side) // 2
+        top = (h - side) // 2
+        base = base.crop((left, top, left + side, top + side)).resize((size, size), Image.Resampling.LANCZOS)
+        # کمی تاریک برای خوانایی عقربه‌ها
+        base = ImageEnhance.Brightness(base).enhance(0.72)
+        base = ImageEnhance.Contrast(base).enhance(1.15)
+
+        overlay = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+        cx, cy = size // 2, size // 2
+        r_outer = size // 2 - 18
+        r_inner = r_outer - 28
+
+        # حلقه بیرونی نئون
+        for i, alpha in enumerate([40, 70, 110]):
+            rr = r_outer + 8 - i * 3
+            draw.ellipse([cx - rr, cy - rr, cx + rr, cy + rr], outline=(*color, alpha), width=3)
+
+        # حلقه داخلی
+        draw.ellipse([cx - r_inner, cy - r_inner, cx + r_inner, cy + r_inner], outline=(*color, 90), width=2)
+
+        # قوس پیشرفت (سمت راست مثل نمونه)
+        now = get_now()
+        # درصد روز بر اساس دقیقه از نیمه‌شب
+        day_pct = (now.hour * 60 + now.minute) / (24 * 60)
+        arc_start = -90
+        arc_end = -90 + day_pct * 360
+        # ضخامت قوس
+        for thick in range(10, 0, -2):
+            a = 30 + thick * 8
+            bbox = [cx - r_outer + 6, cy - r_outer + 6, cx + r_outer - 6, cy + r_outer - 6]
+            draw.arc(bbox, start=arc_start, end=arc_end, fill=(*color, min(a, 200)), width=thick)
+
+        # نشانگرهای ساعت ۱..۱۲
+        for i in range(12):
+            angle = math.radians(i * 30 - 90)
+            x1 = cx + (r_inner - 8) * math.cos(angle)
+            y1 = cy + (r_inner - 8) * math.sin(angle)
+            x2 = cx + (r_inner + 10) * math.cos(angle)
+            y2 = cy + (r_inner + 10) * math.sin(angle)
+            draw.line([(x1, y1), (x2, y2)], fill=(*color, 180), width=3)
+            # عدد
+            num = str(i if i != 0 else 12)
+            nx = cx + (r_inner - 36) * math.cos(angle)
+            ny = cy + (r_inner - 36) * math.sin(angle)
+            try:
+                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
+            except Exception:
+                font = ImageFont.load_default()
+            bbox = draw.textbbox((0, 0), num, font=font)
+            tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+            draw.text((nx - tw / 2, ny - th / 2), num, fill=(*color, 220), font=font)
+
+        # عقربه‌ها
+        h = now.hour % 12
+        m = now.minute
+        s = now.second
+        hour_angle = math.radians((h + m / 60) * 30 - 90)
+        min_angle = math.radians((m + s / 60) * 6 - 90)
+        # ساعت
+        hx = cx + (r_inner * 0.45) * math.cos(hour_angle)
+        hy = cy + (r_inner * 0.45) * math.sin(hour_angle)
+        draw.line([(cx, cy), (hx, hy)], fill=(*color, 230), width=7)
+        # دقیقه
+        mx = cx + (r_inner * 0.72) * math.cos(min_angle)
+        my = cy + (r_inner * 0.72) * math.sin(min_angle)
+        draw.line([(cx, cy), (mx, my)], fill=(*color, 255), width=4)
+        # مرکز
+        draw.ellipse([cx - 10, cy - 10, cx + 10, cy + 10], fill=(*color, 255))
+        draw.ellipse([cx - 5, cy - 5, cx + 5, cy + 5], fill=(8, 12, 20, 255))
+
+        # برچسب‌های گوشه
+        try:
+            f_sm = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
+        except Exception:
+            f_sm = ImageFont.load_default()
+        time_str = now.strftime("%H:%M")
+        draw.text((28, 24), time_str, fill=(*color, 240), font=f_sm)
+        pct = int(day_pct * 100)
+        pct_str = f"{pct}%"
+        bbox = draw.textbbox((0, 0), pct_str, font=f_sm)
+        tw = bbox[2] - bbox[0]
+        draw.text((size - 28 - tw, 24), pct_str, fill=(*color, 240), font=f_sm)
+
+        # ماسک دایره‌ای
+        mask = Image.new("L", (size, size), 0)
+        md = ImageDraw.Draw(mask)
+        md.ellipse([4, 4, size - 5, size - 5], fill=255)
+        composed = Image.alpha_composite(base, overlay)
+        result = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        result.paste(composed, (0, 0), mask)
+
+        if not out_path:
+            out_path = os.path.join(tempfile.gettempdir(), f"pclock_{int(_t.time()*1000)}.png")
+        result.convert("RGB").save(out_path, "PNG", optimize=True)
+        return out_path
+    except Exception as e:
+        logger.error(f"compose_profile_clock: {e}\n{traceback.format_exc()}")
+        return None
+
 
 def create_tarikh():
     jdatetime.set_locale('fa_IR')
@@ -4800,6 +4947,53 @@ class SelfBotManager:
             else:
                 await event.edit("❌ لطفاً یک کلمه وارد کنید")
             return
+
+        # فیلتر [کلمه] بدون نقطه هم کار کند
+        if cmd == 'فیلتر' and args and args[0] not in ('روشن', 'خاموش', 'لیست', 'حذف'):
+            word = ' '.join(args)
+            if word:
+                db.add_filter_word(self.user_id, word)
+                await event.edit(f"✅ کلمه {word} به لیست فیلتر اضافه شد\nبرای فعال‌سازی: فیلتر روشن")
+            return
+
+        # ساعت پروفایل
+        if cmd in ('ساعت_پروفایل', 'ساعتپروفایل', 'ساعت') and args:
+            if args[0] == 'روشن':
+                db.update_selfbot_setting(self.user_id, 'profile_clock_enabled', 1)
+                await self._backup_current_profile_photo()
+                ok = await self.update_profile_clock(force=True)
+                await event.edit("✅ ساعت روی پروفایل روشن شد" if ok else "⚠️ روشن شد ولی آپلود عکس ناموفق بود")
+                return
+            elif args[0] == 'خاموش':
+                await self.restore_profile_clock()
+                await event.edit("✅ ساعت پروفایل خاموش و عکس قبلی بازگردانده شد")
+                return
+            elif args[0] == 'رنگ' and len(args) >= 2:
+                c = args[1].lower()
+                mapping = {
+                    'فیروزه': 'cyan', 'فیروزه‌ای': 'cyan', 'cyan': 'cyan',
+                    'سبز': 'green', 'green': 'green',
+                    'بنفش': 'purple', 'purple': 'purple',
+                    'صورتی': 'pink', 'pink': 'pink',
+                    'نارنجی': 'orange', 'orange': 'orange',
+                    'قرمز': 'red', 'red': 'red',
+                    'آبی': 'blue', 'ابی': 'blue', 'blue': 'blue',
+                    'سفید': 'white', 'white': 'white',
+                }
+                color = mapping.get(c, c if c in PROFILE_CLOCK_COLORS else None)
+                if not color:
+                    await event.edit("❌ رنگ نامعتبر. گزینه‌ها: فیروزه‌ای سبز بنفش صورتی نارنجی قرمز آبی سفید")
+                    return
+                db.update_selfbot_setting(self.user_id, 'profile_clock_color', color)
+                if db.get_selfbot_settings(self.user_id).get('profile_clock_enabled'):
+                    await self.update_profile_clock(force=True)
+                await event.edit(f"✅ رنگ ساعت: {color}")
+                return
+
+        # ویدیو → ویس
+        if cmd in ('ویس', 'ویدیو_به_ویس', 'ویدیوبهویس', 'صدا') and (not args or (args and args[0] in ('کن', 'بساز', 'تبدیل'))):
+            await self.video_to_voice(event)
+            return
         
         lock_commands = {
             'لینک': 'lock_link',
@@ -6447,6 +6641,162 @@ class SelfBotManager:
                     self.BASE_NAME = original_name
         except:
             pass
+
+    async def _backup_current_profile_photo(self):
+        """ذخیره عکس پروفایل فعلی قبل از روشن کردن ساعت"""
+        try:
+            settings = db.get_selfbot_settings(self.user_id)
+            if settings.get('profile_clock_backup') and os.path.exists(str(settings.get('profile_clock_backup'))):
+                return settings.get('profile_clock_backup')
+            os.makedirs(MEDIA_FOLDER, exist_ok=True)
+            backup_path = os.path.join(MEDIA_FOLDER, f"pclock_backup_{self.user_id}.jpg")
+            path = await self.client.download_profile_photo('me', file=backup_path)
+            if path and os.path.exists(path):
+                db.update_selfbot_setting(self.user_id, 'profile_clock_backup', path)
+                return path
+        except Exception as e:
+            logger.error(f"backup profile photo: {e}")
+        return None
+
+    async def update_profile_clock(self, force=False):
+        """بروزرسانی عکس پروفایل با ساعت سایبرپانک روی عکس کاربر"""
+        settings = db.get_selfbot_settings(self.user_id)
+        if not settings.get('profile_clock_enabled') and not force:
+            return False
+        try:
+            color = settings.get('profile_clock_color') or 'cyan'
+            # منبع عکس: بکاپ اصلی یا دانلود فعلی
+            source = settings.get('profile_clock_backup')
+            if not source or not os.path.exists(str(source)):
+                source = await self._backup_current_profile_photo()
+            if not source or not os.path.exists(str(source)):
+                # آخرین تلاش: دانلود پروفایل فعلی
+                tmp = os.path.join(MEDIA_FOLDER, f"pclock_src_{self.user_id}.jpg")
+                source = await self.client.download_profile_photo('me', file=tmp)
+            if not source or not os.path.exists(str(source)):
+                logger.error(f"profile clock: no source photo for {self.user_id}")
+                return False
+            out = compose_profile_clock_image(str(source), color_name=color)
+            if not out or not os.path.exists(out):
+                return False
+            # حذف عکس فعلی و آپلود جدید
+            try:
+                me = await self.client.get_me()
+                if me.photo:
+                    photos = await self.client.get_profile_photos('me', limit=1)
+                    if photos:
+                        await self.client(DeletePhotosRequest(id=[photos[0]]))
+            except Exception as e:
+                logger.debug(f"delete old pf: {e}")
+            file = await self.client.upload_file(out)
+            await self.client(UploadProfilePhotoRequest(file=file))
+            try:
+                os.remove(out)
+            except Exception:
+                pass
+            self._last_pclock_minute = get_now().minute
+            return True
+        except Exception as e:
+            logger.error(f"update_profile_clock: {e}\n{traceback.format_exc()}")
+            return False
+
+    async def restore_profile_clock(self):
+        """خاموش کردن ساعت و برگرداندن عکس پروفایل قبلی"""
+        try:
+            db.update_selfbot_setting(self.user_id, 'profile_clock_enabled', 0)
+            settings = db.get_selfbot_settings(self.user_id)
+            backup = settings.get('profile_clock_backup')
+            # حذف عکس فعلی (ساعت‌دار)
+            try:
+                me = await self.client.get_me()
+                if me.photo:
+                    photos = await self.client.get_profile_photos('me', limit=1)
+                    if photos:
+                        await self.client(DeletePhotosRequest(id=[photos[0]]))
+            except Exception:
+                pass
+            if backup and os.path.exists(str(backup)):
+                file = await self.client.upload_file(str(backup))
+                await self.client(UploadProfilePhotoRequest(file=file))
+            return True
+        except Exception as e:
+            logger.error(f"restore_profile_clock: {e}")
+            return False
+
+    async def video_to_voice(self, event):
+        """ریپلای روی ویدیو → استخراج صدا و ارسال به صورت ویس در همان چت"""
+        if not event.is_reply:
+            await event.edit("⚠️ روی یک ویدیو ریپلای کنید و بنویسید: ویس")
+            return
+        try:
+            reply = await event.get_reply_message()
+            if not reply or not reply.media:
+                await event.edit("⚠️ پیام ریپلای‌شده مدیا ندارد")
+                return
+            # تشخیص ویدیو
+            is_video = bool(getattr(reply, 'video', None) or getattr(reply, 'video_note', None))
+            if not is_video and reply.document:
+                mime = getattr(reply.document, 'mime_type', '') or ''
+                if mime.startswith('video/'):
+                    is_video = True
+            if not is_video:
+                await event.edit("⚠️ لطفاً روی یک ویدیو ریپلای کنید")
+                return
+            await event.edit("⏳ در حال تبدیل ویدیو به ویس...")
+            os.makedirs(MEDIA_FOLDER, exist_ok=True)
+            vid_path = await self.client.download_media(reply, file=os.path.join(MEDIA_FOLDER, f"v2v_{self.user_id}_{event.id}"))
+            if not vid_path or not os.path.exists(vid_path):
+                await event.edit("❌ دانلود ویدیو ناموفق")
+                return
+            ogg_path = vid_path + ".ogg"
+            # ffmpeg → opus voice
+            cmd = [
+                "ffmpeg", "-y", "-i", vid_path,
+                "-vn", "-acodec", "libopus", "-b:a", "64k", "-ac", "1",
+                ogg_path
+            ]
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
+            )
+            await proc.wait()
+            if proc.returncode != 0 or not os.path.exists(ogg_path):
+                # fallback بدون libopus
+                cmd2 = ["ffmpeg", "-y", "-i", vid_path, "-vn", "-acodec", "libopus", "-b:a", "48k", ogg_path]
+                proc2 = await asyncio.create_subprocess_exec(
+                    *cmd2, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
+                )
+                await proc2.wait()
+            if not os.path.exists(ogg_path):
+                await event.edit("❌ استخراج صدا ناموفق (ffmpeg)")
+                try:
+                    os.remove(vid_path)
+                except Exception:
+                    pass
+                return
+            await self.client.send_file(
+                event.chat_id,
+                ogg_path,
+                voice_note=True,
+                reply_to=reply.id
+            )
+            try:
+                await event.delete()
+            except Exception:
+                try:
+                    await event.edit("✅ ویس ارسال شد")
+                except Exception:
+                    pass
+            for p in (vid_path, ogg_path):
+                try:
+                    os.remove(p)
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.error(f"video_to_voice: {e}\n{traceback.format_exc()}")
+            try:
+                await event.edit(f"❌ خطا: {str(e)[:80]}")
+            except Exception:
+                pass
     
     async def update_profile_task(self):
         while self.running:
@@ -6454,7 +6804,17 @@ class SelfBotManager:
                 await self.update_profile_name()
             except Exception as e:
                 logger.error(f"خطا در update_profile_task برای کاربر {self.user_id}: {e}")
-            await asyncio.sleep(60)
+            # ساعت روی پروفایل — فقط وقتی دقیقه عوض شد
+            try:
+                settings = db.get_selfbot_settings(self.user_id)
+                if settings.get('profile_clock_enabled'):
+                    cur_min = get_now().minute
+                    last = getattr(self, '_last_pclock_minute', None)
+                    if last is None or last != cur_min:
+                        await self.update_profile_clock()
+            except Exception as e:
+                logger.error(f"profile_clock task: {e}")
+            await asyncio.sleep(20)
     
     async def heart_animation(self, chat_id):
         try:
@@ -6741,16 +7101,23 @@ class SelfBotManager:
         if isinstance(event.message.peer_id, PeerUser) and not event.message.out and event.message.text:
             db.cache_message(self.user_id, chat_id, event.message.id, event.message.text)
         
-        if not event.message.out and event.message.text:
+        if not event.message.out:
             if db.get_filter_enabled(self.user_id):
-                filter_words = db.get_filter_words(self.user_id)
-                for word_info in filter_words:
-                    if word_info['enabled'] and word_info['word'].lower() in event.message.text.lower():
-                        try:
-                            await event.message.delete()
-                            return
-                        except:
-                            pass
+                check_text = (event.message.text or event.message.message or "") or ""
+                # کپشن مدیا
+                if not check_text and getattr(event.message, 'media', None):
+                    check_text = getattr(event.message, 'message', None) or ""
+                if check_text:
+                    filter_words = db.get_filter_words(self.user_id)
+                    low = check_text.lower()
+                    for word_info in filter_words:
+                        w = (word_info.get('word') or '').strip()
+                        if word_info.get('enabled') and w and w.lower() in low:
+                            try:
+                                await event.message.delete()
+                                return
+                            except Exception:
+                                pass
         
         # ========== اسپم دشمن (پیوی / گروه) — یک اسپم تصادفی به ازای هر پیام، بدون تکرار پشت‌سرهم ==========
         if not event.message.out and event.sender_id:
@@ -8219,10 +8586,15 @@ def get_time_menu_keyboard(user_id):
     settings = db.get_selfbot_settings(user_id)
     time_enabled = settings.get('time_enabled', False)
     flag_enabled = settings.get('flag_enabled', False)
+    clock_on = bool(settings.get('profile_clock_enabled'))
+    clock_color = settings.get('profile_clock_color') or 'cyan'
     keyboard = [
         [
             InlineKeyboardButton(f"🕐 تایم {'✓ روشن' if time_enabled else 'خاموش'}", callback_data=f"exec_time_on_{user_id}" if not time_enabled else f"exec_time_off_{user_id}", style="success" if time_enabled else "primary"),
             InlineKeyboardButton(f"🏳️ پرچم {'✓ روشن' if flag_enabled else 'خاموش'}", callback_data=f"exec_time_flag_{user_id}", style="success" if flag_enabled else "primary")
+        ],
+        [
+            InlineKeyboardButton(f"🕰 ساعت در پروفایل {'✓ روشن' if clock_on else 'خاموش'}", callback_data=f"pclock_menu_{user_id}", style="success" if clock_on else "primary"),
         ],
         [
             InlineKeyboardButton("📅 تقویم", callback_data=f"exec_calendar_{user_id}", style="primary")
@@ -8234,7 +8606,6 @@ def get_time_menu_keyboard(user_id):
         [
             InlineKeyboardButton("📝 تنظیمات بیو", callback_data=f"bio_menu_{user_id}", style="primary")
         ],
-        
         [
             InlineKeyboardButton("📖 راهنما", callback_data=f"exec_time_help_{user_id}", style="primary")
         ],
@@ -8242,6 +8613,41 @@ def get_time_menu_keyboard(user_id):
             InlineKeyboardButton("⚈ بازگشت", callback_data=f"back_main", style="danger")
         ]
     ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_profile_clock_menu_keyboard(user_id):
+    settings = db.get_selfbot_settings(user_id)
+    clock_on = bool(settings.get('profile_clock_enabled'))
+    color = (settings.get('profile_clock_color') or 'cyan').lower()
+    colors = [
+        ("cyan", "🩵 فیروزه‌ای"),
+        ("green", "💚 سبز"),
+        ("purple", "💜 بنفش"),
+        ("pink", "💗 صورتی"),
+        ("orange", "🧡 نارنجی"),
+        ("red", "❤️ قرمز"),
+        ("blue", "💙 آبی"),
+        ("white", "🤍 سفید"),
+    ]
+    keyboard = [
+        [
+            InlineKeyboardButton(f"{'✓ ' if clock_on else ''}🕰 روشن", callback_data=f"exec_pclock_on_{user_id}", style="success" if clock_on else "primary"),
+            InlineKeyboardButton(f"{'✓ ' if not clock_on else ''}🕰 خاموش", callback_data=f"exec_pclock_off_{user_id}", style="danger" if not clock_on else "primary"),
+        ],
+        [InlineKeyboardButton("🎨 رنگ ساعت:", callback_data=f"exec_pclock_noop_{user_id}", style="secondary")],
+    ]
+    row = []
+    for key, label in colors:
+        mark = "✓ " if color == key else ""
+        row.append(InlineKeyboardButton(f"{mark}{label}", callback_data=f"exec_pclock_color_{key}_{user_id}", style="success" if color == key else "primary"))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+    keyboard.append([InlineKeyboardButton("🔄 بروزرسانی الان", callback_data=f"exec_pclock_refresh_{user_id}", style="primary")])
+    keyboard.append([InlineKeyboardButton("📖 راهنما", callback_data=f"exec_pclock_help_{user_id}", style="primary")])
+    keyboard.append([InlineKeyboardButton("⚈ بازگشت", callback_data=f"time_menu_{user_id}", style="danger")])
     return InlineKeyboardMarkup(keyboard)
 
 def get_font_menu_keyboard(user_id):
@@ -8475,6 +8881,9 @@ def get_tools_menu_keyboard(user_id):
         [
             InlineKeyboardButton("🎨 ساخت استیکر", callback_data=f"exec_make_sticker_{user_id}", style="success"),
             InlineKeyboardButton("🔢 ایدی عددی", callback_data=f"exec_numeric_id_help_{user_id}", style="primary"),
+        ],
+        [
+            InlineKeyboardButton("🎙 ویدیو → ویس", callback_data=f"exec_video_to_voice_{user_id}", style="success"),
         ],
         [
             InlineKeyboardButton(f"{'✓ ' if db.get_learning_enabled(user_id) else ''}🧠 یادگیری روشن", callback_data=f"exec_learning_on_{user_id}", style="success" if db.get_learning_enabled(user_id) else "primary"),
@@ -9588,6 +9997,9 @@ async def _button_callback_impl(update: Update, context: ContextTypes.DEFAULT_TY
     if data.startswith("flag_menu_"):
         await safe_edit_panel(query, "› انتخاب پرچم", reply_markup=get_flag_menu_keyboard(user_id))
         return
+    if data.startswith("pclock_menu_"):
+        await safe_edit_panel(query, "🕰 ساعت در پروفایل\nروشن/خاموش + انتخاب رنگ", reply_markup=get_profile_clock_menu_keyboard(user_id))
+        return
     
     parts = data.split('_')
     if len(parts) > 1:
@@ -9687,7 +10099,7 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         'lock_', 'filter_', 'ai_', 'autosend_', 'self_on', 'self_off',
         'monshi_on', 'monshi_off', 'spam_protection_', 'bold', 'underline',
         'strike', 'quote', 'spoiler', 'italic', 'code', 'pre',
-        'translate_', 'style_'
+        'translate_', 'style_', 'pclock_'
     )
     _needs_temp_msg = not any(cmd.startswith(p) or cmd == p.rstrip('_') for p in _silent_prefixes)
     if _needs_temp_msg:
@@ -10604,10 +11016,20 @@ OCR روی عکس (ریپلای)
 › 🗑️ پاک کردن / حذف اسپم — مدیریت لیست اسپم.""",
         'filter_help': """📖 راهنمای فیلتر کلمات
 
-› 🚫 .فیلتر [کلمه] — کلمه را به لیست فیلتر اضافه می‌کند.
-› ✅ فیلتر روشن — فیلتر فعال می‌شود (پیام حاوی کلمه حذف می‌شود).
-› ❌ فیلتر خاموش
-› 📜 لیست / مدیریت — روشن/خاموش یا حذف هر کلمه.""",
+› افزودن کلمه:
+  • `.فیلتر تبلیغ`
+  • `فیلتر تبلیغ`
+
+› فعال‌سازی:
+  • `فیلتر روشن` — هر پیام حاوی کلمهٔ فعال حذف می‌شود
+  • `فیلتر خاموش`
+
+› مدیریت:
+  • `فیلتر لیست` — نمایش کلمات
+  • `فیلتر حذف [کلمه]`
+
+› از پنل هم می‌توانید هر کلمه را تکی روشن/خاموش یا حذف کنید.
+› روی کپشن عکس/ویدیو هم اعمال می‌شود (در صورت داشتن دسترسی حذف).""",
         'protection_help': """📖 راهنمای حفاظت اسپم
 
 › 🛡️ اسپم روشن/خاموش — محافظت در برابر اسپم دیگران.
@@ -10637,7 +11059,8 @@ OCR روی عکس (ریپلای)
 › 👑 تگ ادمین — منشن ادمین‌های گروه.
 › 📌 پین — پین کردن پیام ریپلای‌شده.
 › 🤖 سلف روشن/خاموش — فعال/غیرفعال کردن سلف‌بات.
-› 🎨 ساخت استیکر — ریپلای روی پیام کاربر + دستور `ساخت استیکر` → استیکر نقل‌قول از @QuotLyBot بدون فوروارد و بدون متن.""",
+› 🎨 ساخت استیکر — ریپلای روی پیام کاربر + دستور `ساخت استیکر` → استیکر نقل‌قول از @QuotLyBot بدون فوروارد و بدون متن.
+› 🎙 ویدیو → ویس — ریپلای روی ویدیو + دستور `ویس` یا `صدا` → استخراج صدا و ارسال به صورت ویس.""",
         'monshi_help': """📖 راهنمای منشی هوشمند
 
 › 🤖 منشی — با دستور `منشی [پاسخ]` فعال می‌شود.
@@ -10954,7 +11377,25 @@ OCR روی عکس (ریپلای)
         return
     
     if cmd == 'filter_word':
-        await msg.edit_text("🚫 برای افزودن کلمه به لیست فیلتر، این پیام را در چت سلف خود ارسال کنید:\n\n.فیلتر [کلمه]\n\nمثال: .فیلتر تبلیغ")
+        help_txt = (
+            "🚫 افزودن کلمه فیلتر\n\n"
+            "در چت سلف بنویسید:\n"
+            "• `.فیلتر تبلیغ`\n"
+            "• `فیلتر تبلیغ`\n\n"
+            "سپس:\n"
+            "• `فیلتر روشن` — فعال‌سازی حذف خودکار\n"
+            "• `فیلتر خاموش`\n"
+            "• `فیلتر لیست`\n"
+            "• `فیلتر حذف [کلمه]`"
+        )
+        try:
+            await safe_edit_panel(query, help_txt, reply_markup=get_filter_menu_keyboard(user_id))
+        except Exception:
+            try:
+                if msg:
+                    await msg.edit_text(help_txt)
+            except Exception:
+                pass
         return
     if cmd == 'filter_on':
         db.set_filter_enabled(user_id, True)
@@ -10963,9 +11404,12 @@ OCR روی عکس (ریپلای)
         except Exception:
             pass
         try:
-            await refresh_panel_keyboard(query, user_id, "🚫 فیلتر", get_filter_menu_keyboard)
+            await refresh_panel_keyboard(query, user_id, "🚫 فیلتر کلمات — روشن شد", get_filter_menu_keyboard)
         except Exception:
-            pass
+            try:
+                await query.edit_message_reply_markup(reply_markup=get_filter_menu_keyboard(user_id))
+            except Exception:
+                pass
         return
     if cmd == 'filter_off':
         db.set_filter_enabled(user_id, False)
@@ -10974,48 +11418,74 @@ OCR روی عکس (ریپلای)
         except Exception:
             pass
         try:
-            await refresh_panel_keyboard(query, user_id, "🚫 فیلتر", get_filter_menu_keyboard)
+            await refresh_panel_keyboard(query, user_id, "🚫 فیلتر کلمات — خاموش شد", get_filter_menu_keyboard)
         except Exception:
-            pass
+            try:
+                await query.edit_message_reply_markup(reply_markup=get_filter_menu_keyboard(user_id))
+            except Exception:
+                pass
         return
     if cmd == 'filter_list' or cmd == 'filter_remove':
         filters = db.get_filter_words(user_id)
         if filters:
             message_text = "📜 مدیریت کلمات فیلتر شده:\n\nروی کلمه بزنید تا روشن/خاموش شود، روی 🗑️ بزنید تا حذف شود.\n\n"
-            await msg.edit_text(message_text, reply_markup=build_filter_words_keyboard(user_id, filters))
+            try:
+                await safe_edit_panel(query, message_text, reply_markup=build_filter_words_keyboard(user_id, filters))
+            except Exception:
+                try:
+                    if msg:
+                        await msg.edit_text(message_text, reply_markup=build_filter_words_keyboard(user_id, filters))
+                    else:
+                        await query.message.edit_text(message_text, reply_markup=build_filter_words_keyboard(user_id, filters))
+                except Exception:
+                    try:
+                        await context.bot.send_message(chat_id=chat_id, text=message_text, reply_markup=build_filter_words_keyboard(user_id, filters))
+                    except Exception:
+                        pass
         else:
-            await msg.edit_text("📭 لیست کلمات فیلتر خالی است\n\nبرای افزودن: .فیلتر [کلمه]")
+            empty_txt = "📭 لیست کلمات فیلتر خالی است\n\nبرای افزودن در سلف بنویسید:\n`.فیلتر تبلیغ`"
+            try:
+                await safe_edit_panel(query, empty_txt, reply_markup=get_filter_menu_keyboard(user_id))
+            except Exception:
+                try:
+                    if msg:
+                        await msg.edit_text(empty_txt)
+                except Exception:
+                    pass
         return
     if cmd.startswith('filtertgl_'):
         try:
             word_id = int(cmd.split('_')[1])
         except (IndexError, ValueError):
-            await msg.edit_text("⚠️ خطا در شناسایی کلمه")
+            try:
+                await query.answer("⚠️ خطا در شناسایی کلمه", show_alert=True)
+            except Exception:
+                pass
             return
         new_state = db.toggle_filter_word_by_id(user_id, word_id)
         if new_state is None:
-            await msg.edit_text("⚠️ این کلمه دیگر در لیست وجود ندارد")
+            try:
+                await query.answer("⚠️ این کلمه دیگر در لیست نیست", show_alert=True)
+            except Exception:
+                pass
         else:
             try:
-                await msg.delete()
+                await query.answer("✅ روشن" if new_state else "❌ خاموش")
             except Exception:
                 pass
         filters = db.get_filter_words(user_id)
+        text = "📜 مدیریت کلمات فیلتر شده:\n\nروی کلمه بزنید تا روشن/خاموش شود، روی 🗑️ بزنید تا حذف شود.\n\n"
         if filters:
-            text = "📜 مدیریت کلمات فیلتر شده:\n\nروی کلمه بزنید تا روشن/خاموش شود، روی 🗑️ بزنید تا حذف شود.\n\n"
             try:
-                try:
-                    await query.message.edit_text(text, reply_markup=build_filter_words_keyboard(user_id, filters))
-                except Exception as _panel_refresh_err:
-                    print(f"⚠️ [DEBUG پنل] رفرش دکمه‌های پنل قدیمی fail شد (احتمالاً پیام قدیمی/غیرقابل‌دسترسه، مشکلی نیست چون خود عملیات انجام شده): {type(_panel_refresh_err).__name__}: {_panel_refresh_err}")
+                await safe_edit_panel(query, text, reply_markup=build_filter_words_keyboard(user_id, filters))
             except Exception:
-                pass
+                try:
+                    await query.edit_message_reply_markup(reply_markup=build_filter_words_keyboard(user_id, filters))
+                except Exception:
+                    pass
         else:
             try:
-                try:
-                    await query.message.edit_text("📭 لیست کلمات فیلتر خالی است\n\nبرای افزودن: .فیلتر [کلمه]")
-                except Exception as _panel_refresh_err:
-                    print(f"⚠️ [DEBUG پنل] رفرش دکمه‌های پنل قدیمی fail شد (احتمالاً پیام قدیمی/غیرقابل‌دسترسه، مشکلی نیست چون خود عملیات انجام شده): {type(_panel_refresh_err).__name__}: {_panel_refresh_err}")
+                await safe_edit_panel(query, "📭 لیست خالی است", reply_markup=get_filter_menu_keyboard(user_id))
             except Exception:
                 pass
         return
@@ -11023,33 +11493,140 @@ OCR روی عکس (ریپلای)
         try:
             word_id = int(cmd.split('_')[1])
         except (IndexError, ValueError):
-            await msg.edit_text("⚠️ خطا در شناسایی کلمه")
+            try:
+                await query.answer("⚠️ خطا", show_alert=True)
+            except Exception:
+                pass
             return
         removed = db.remove_filter_word_by_id(user_id, word_id)
         try:
-            await msg.delete()
+            await query.answer("🗑️ حذف شد" if removed else "یافت نشد")
         except Exception:
             pass
         filters = db.get_filter_words(user_id)
         if filters:
             text = "📜 مدیریت کلمات فیلتر شده:\n\nروی کلمه بزنید تا روشن/خاموش شود، روی 🗑️ بزنید تا حذف شود.\n\n"
             try:
-                try:
-                    await query.message.edit_text(text, reply_markup=build_filter_words_keyboard(user_id, filters))
-                except Exception as _panel_refresh_err:
-                    print(f"⚠️ [DEBUG پنل] رفرش دکمه‌های پنل قدیمی fail شد (احتمالاً پیام قدیمی/غیرقابل‌دسترسه، مشکلی نیست چون خود عملیات انجام شده): {type(_panel_refresh_err).__name__}: {_panel_refresh_err}")
+                await safe_edit_panel(query, text, reply_markup=build_filter_words_keyboard(user_id, filters))
             except Exception:
-                pass
+                try:
+                    await query.edit_message_reply_markup(reply_markup=build_filter_words_keyboard(user_id, filters))
+                except Exception:
+                    pass
         else:
             try:
-                try:
-                    await query.message.edit_text("📭 لیست کلمات فیلتر خالی است\n\nبرای افزودن: .فیلتر [کلمه]")
-                except Exception as _panel_refresh_err:
-                    print(f"⚠️ [DEBUG پنل] رفرش دکمه‌های پنل قدیمی fail شد (احتمالاً پیام قدیمی/غیرقابل‌دسترسه، مشکلی نیست چون خود عملیات انجام شده): {type(_panel_refresh_err).__name__}: {_panel_refresh_err}")
+                await safe_edit_panel(query, "📭 لیست کلمات فیلتر خالی است\n\n`.فیلتر [کلمه]`", reply_markup=get_filter_menu_keyboard(user_id))
             except Exception:
                 pass
         return
-    
+
+    # ——— ساعت روی پروفایل ———
+    if cmd == 'pclock_on':
+        db.update_selfbot_setting(user_id, 'profile_clock_enabled', 1)
+        try:
+            await manager._backup_current_profile_photo()
+            ok = await manager.update_profile_clock(force=True)
+            await query.answer("✅ ساعت پروفایل روشن شد" if ok else "⚠️ روشن شد (آپلود ممکن است تأخیر داشته باشد)")
+        except Exception as e:
+            try:
+                await query.answer(f"خطا: {str(e)[:40]}", show_alert=True)
+            except Exception:
+                pass
+        try:
+            await refresh_panel_keyboard(query, user_id, "🕰 ساعت در پروفایل", get_profile_clock_menu_keyboard)
+        except Exception:
+            pass
+        return
+    if cmd == 'pclock_off':
+        try:
+            await manager.restore_profile_clock()
+            await query.answer("✅ ساعت خاموش — پروفایل قبلی برگشت")
+        except Exception as e:
+            try:
+                await query.answer(f"خطا: {str(e)[:40]}", show_alert=True)
+            except Exception:
+                pass
+        try:
+            await refresh_panel_keyboard(query, user_id, "🕰 ساعت در پروفایل", get_profile_clock_menu_keyboard)
+        except Exception:
+            pass
+        return
+    if cmd.startswith('pclock_color_'):
+        color = cmd.replace('pclock_color_', '', 1)
+        if color not in PROFILE_CLOCK_COLORS:
+            try:
+                await query.answer("رنگ نامعتبر", show_alert=True)
+            except Exception:
+                pass
+            return
+        db.update_selfbot_setting(user_id, 'profile_clock_color', color)
+        if db.get_selfbot_settings(user_id).get('profile_clock_enabled'):
+            try:
+                await manager.update_profile_clock(force=True)
+            except Exception:
+                pass
+        try:
+            await query.answer(f"✅ رنگ: {color}")
+        except Exception:
+            pass
+        try:
+            await refresh_panel_keyboard(query, user_id, "🕰 ساعت در پروفایل", get_profile_clock_menu_keyboard)
+        except Exception:
+            pass
+        return
+    if cmd == 'pclock_refresh':
+        try:
+            ok = await manager.update_profile_clock(force=True)
+            await query.answer("✅ بروزرسانی شد" if ok else "❌ خطا در بروزرسانی", show_alert=not ok)
+        except Exception as e:
+            try:
+                await query.answer(str(e)[:50], show_alert=True)
+            except Exception:
+                pass
+        return
+    if cmd == 'pclock_noop':
+        try:
+            await query.answer("یک رنگ انتخاب کنید")
+        except Exception:
+            pass
+        return
+    if cmd == 'pclock_help':
+        help_txt = (
+            "🕰 راهنمای ساعت روی پروفایل\n\n"
+            "• روشن: عکس پروفایل شما بکاپ می‌شود و ساعت سایبرپانک روی همان عکس می‌نشیند.\n"
+            "• هر دقیقه عکس جدید با دقیقهٔ فعلی جایگزین می‌شود.\n"
+            "• خاموش: عکس قبلی (قبل از روشن شدن) برمی‌گردد.\n"
+            "• رنگ: فیروزه‌ای / سبز / بنفش / صورتی / نارنجی / قرمز / آبی / سفید\n\n"
+            "دستورات متنی:\n"
+            "`ساعت روشن`\n"
+            "`ساعت خاموش`\n"
+            "`ساعت رنگ سبز`"
+        )
+        try:
+            await safe_edit_panel(query, help_txt, reply_markup=get_profile_clock_menu_keyboard(user_id))
+        except Exception:
+            pass
+        return
+
+    if cmd == 'video_to_voice':
+        help_txt = (
+            "🎙 ویدیو → ویس\n\n"
+            "روی یک ویدیو در چت سلف ریپلای کنید و بنویسید:\n"
+            "• `ویس`\n"
+            "• `صدا`\n"
+            "• `ویدیو به ویس`\n\n"
+            "صدا استخراج و به صورت ویس در همان چت ارسال می‌شود."
+        )
+        try:
+            await safe_edit_panel(query, help_txt, reply_markup=get_tools_menu_keyboard(user_id))
+        except Exception:
+            try:
+                if msg:
+                    await msg.edit_text(help_txt)
+            except Exception:
+                pass
+        return
+
     if cmd == 'spam_protection_on':
         db.set_spam_settings(user_id, spam_protection=1)
         try:
