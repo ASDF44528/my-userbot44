@@ -2447,126 +2447,152 @@ def create_time2():
 
 # ========== ساعت روی پروفایل (سایبرپانک) ==========
 PROFILE_CLOCK_COLORS = {
-    "cyan": (0, 255, 220),
+    "cyan": (0, 255, 200),
     "green": (0, 255, 120),
     "purple": (180, 80, 255),
     "pink": (255, 60, 180),
     "orange": (255, 140, 40),
     "red": (255, 40, 80),
-    "blue": (40, 140, 255),
-    "white": (230, 240, 255),
+    "blue": (40, 160, 255),
+    "white": (230, 245, 255),
 }
 
 def compose_profile_clock_image(photo_path: str, color_name: str = "cyan", out_path: str = None) -> str:
-    """ساخت عکس پروفایل با ساعت سایبرپانک شبیه نمونه — خروجی مسیر PNG"""
-    import math, tempfile, time as _t
+    """ساعت پروفایل شبیه نمونه: قاب دندانه‌دار، قوس نئون، عکس وسط نیمه‌تاریک + مدار"""
+    import math, tempfile, time as _t, random as _rnd
     try:
-        from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
+        from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageFilter
     except Exception as e:
         logger.error(f"compose_profile_clock PIL: {e}")
         return None
     try:
         color = PROFILE_CLOCK_COLORS.get((color_name or "cyan").lower(), PROFILE_CLOCK_COLORS["cyan"])
-        size = 720
-        # بارگذاری و برش مربعی عکس کاربر
+        size = 800
+        cx = cy = size // 2
+        canvas = Image.new("RGBA", (size, size), (5, 8, 12, 255))
+
+        # عکس مربعی
         base = Image.open(photo_path).convert("RGBA")
         w, h = base.size
         side = min(w, h)
-        left = (w - side) // 2
-        top = (h - side) // 2
-        base = base.crop((left, top, left + side, top + side)).resize((size, size), Image.Resampling.LANCZOS)
-        # کمی تاریک برای خوانایی عقربه‌ها
-        base = ImageEnhance.Brightness(base).enhance(0.72)
-        base = ImageEnhance.Contrast(base).enhance(1.15)
+        base = base.crop(((w - side) // 2, (h - side) // 2, (w - side) // 2 + side, (h - side) // 2 + side))
+        base = base.resize((size, size), Image.Resampling.LANCZOS)
+        base = ImageEnhance.Contrast(base).enhance(1.25)
+        base = ImageEnhance.Brightness(base).enhance(0.85)
 
-        overlay = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(overlay)
-        cx, cy = size // 2, size // 2
-        r_outer = size // 2 - 18
-        r_inner = r_outer - 28
+        r_photo = int(size * 0.42)
+        photo_mask = Image.new("L", (size, size), 0)
+        ImageDraw.Draw(photo_mask).ellipse([cx - r_photo, cy - r_photo, cx + r_photo, cy + r_photo], fill=255)
 
-        # حلقه بیرونی نئون
-        for i, alpha in enumerate([40, 70, 110]):
-            rr = r_outer + 8 - i * 3
-            draw.ellipse([cx - rr, cy - rr, cx + rr, cy + rr], outline=(*color, alpha), width=3)
+        photo_layer = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        photo_layer.paste(base, (0, 0), photo_mask)
 
-        # حلقه داخلی
-        draw.ellipse([cx - r_inner, cy - r_inner, cx + r_inner, cy + r_inner], outline=(*color, 90), width=2)
+        # نیمه چپ تاریک
+        dark_half = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        ImageDraw.Draw(dark_half).rectangle([0, 0, cx - 4, size], fill=(0, 0, 0, 155))
+        # فقط داخل دایره
+        alpha = dark_half.split()[-1]
+        alpha = Image.composite(alpha, Image.new("L", (size, size), 0), photo_mask)
+        dark_half.putalpha(alpha)
+        photo_layer = Image.alpha_composite(photo_layer, dark_half)
 
-        # قوس پیشرفت (سمت راست مثل نمونه)
+        # خطوط مدار روی راست
+        circuit = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        cd = ImageDraw.Draw(circuit)
+        _rnd.seed(7)
+        for _ in range(40):
+            x1 = _rnd.randint(cx, size - 30)
+            y1 = _rnd.randint(30, size - 30)
+            if (x1 - cx) ** 2 + (y1 - cy) ** 2 > r_photo ** 2:
+                continue
+            x2 = x1 + _rnd.randint(-50, 70)
+            y2 = y1 + _rnd.randint(-60, 60)
+            cd.line([(x1, y1), (x2, y2)], fill=(*color, 100), width=1)
+            cd.ellipse([x1 - 2, y1 - 2, x1 + 2, y1 + 2], fill=(*color, 160))
+        calpha = circuit.split()[-1]
+        calpha = Image.composite(calpha, Image.new("L", (size, size), 0), photo_mask)
+        circuit.putalpha(calpha)
+        photo_layer = Image.alpha_composite(photo_layer, circuit)
+        canvas = Image.alpha_composite(canvas, photo_layer)
+
+        # قاب دندانه‌دار
+        rim = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        rd = ImageDraw.Draw(rim)
+        r_outer = int(size * 0.48)
+        r_inner = int(size * 0.435)
+        teeth = 56
+        for i in range(teeth):
+            a0 = math.radians(i * 360 / teeth - 90)
+            a1 = math.radians((i + 0.5) * 360 / teeth - 90)
+            mid = (a0 + a1) / 2
+            pts = [
+                (cx + r_inner * math.cos(a0), cy + r_inner * math.sin(a0)),
+                (cx + r_outer * math.cos(mid - 0.01), cy + r_outer * math.sin(mid - 0.01)),
+                (cx + r_outer * math.cos(mid + 0.01), cy + r_outer * math.sin(mid + 0.01)),
+                (cx + r_inner * math.cos(a1), cy + r_inner * math.sin(a1)),
+            ]
+            rd.polygon(pts, fill=(*color, 45), outline=(*color, 190))
+        for ww, aa in ((7, 180), (3, 255)):
+            rd.ellipse([cx - r_inner, cy - r_inner, cx + r_inner, cy + r_inner], outline=(*color, aa), width=ww)
+        canvas = Image.alpha_composite(canvas, rim)
+
+        # قوس نئون راست
         now = get_now()
-        # درصد روز بر اساس دقیقه از نیمه‌شب
-        day_pct = (now.hour * 60 + now.minute) / (24 * 60)
-        arc_start = -90
-        arc_end = -90 + day_pct * 360
-        # ضخامت قوس
-        for thick in range(10, 0, -2):
-            a = 30 + thick * 8
-            bbox = [cx - r_outer + 6, cy - r_outer + 6, cx + r_outer - 6, cy + r_outer - 6]
-            draw.arc(bbox, start=arc_start, end=arc_end, fill=(*color, min(a, 200)), width=thick)
+        day_pct = (now.hour * 60 + now.minute) / (24.0 * 60)
+        arc_img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        ad = ImageDraw.Draw(arc_img)
+        arc_r = r_outer - 2
+        span = 25 + day_pct * 155
+        bbox = [cx - arc_r, cy - arc_r, cx + arc_r, cy + arc_r]
+        for thick, alpha in ((24, 35), (16, 70), (10, 140), (5, 255)):
+            ad.arc(bbox, start=-75, end=-75 + span, fill=(*color, alpha), width=thick)
+        canvas = Image.alpha_composite(canvas, arc_img)
 
-        # نشانگرهای ساعت ۱..۱۲
-        for i in range(12):
-            angle = math.radians(i * 30 - 90)
-            x1 = cx + (r_inner - 8) * math.cos(angle)
-            y1 = cy + (r_inner - 8) * math.sin(angle)
-            x2 = cx + (r_inner + 10) * math.cos(angle)
-            y2 = cy + (r_inner + 10) * math.sin(angle)
-            draw.line([(x1, y1), (x2, y2)], fill=(*color, 180), width=3)
-            # عدد
-            num = str(i if i != 0 else 12)
-            nx = cx + (r_inner - 36) * math.cos(angle)
-            ny = cy + (r_inner - 36) * math.sin(angle)
-            try:
-                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
-            except Exception:
-                font = ImageFont.load_default()
-            bbox = draw.textbbox((0, 0), num, font=font)
-            tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-            draw.text((nx - tw / 2, ny - th / 2), num, fill=(*color, 220), font=font)
-
-        # عقربه‌ها
-        h = now.hour % 12
-        m = now.minute
-        s = now.second
-        hour_angle = math.radians((h + m / 60) * 30 - 90)
-        min_angle = math.radians((m + s / 60) * 6 - 90)
-        # ساعت
-        hx = cx + (r_inner * 0.45) * math.cos(hour_angle)
-        hy = cy + (r_inner * 0.45) * math.sin(hour_angle)
-        draw.line([(cx, cy), (hx, hy)], fill=(*color, 230), width=7)
-        # دقیقه
-        mx = cx + (r_inner * 0.72) * math.cos(min_angle)
-        my = cy + (r_inner * 0.72) * math.sin(min_angle)
-        draw.line([(cx, cy), (mx, my)], fill=(*color, 255), width=4)
-        # مرکز
-        draw.ellipse([cx - 10, cy - 10, cx + 10, cy + 10], fill=(*color, 255))
-        draw.ellipse([cx - 5, cy - 5, cx + 5, cy + 5], fill=(8, 12, 20, 255))
-
-        # برچسب‌های گوشه
         try:
-            f_sm = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
+            font_num = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
+            font_lab = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 34)
         except Exception:
-            f_sm = ImageFont.load_default()
-        time_str = now.strftime("%H:%M")
-        draw.text((28, 24), time_str, fill=(*color, 240), font=f_sm)
-        pct = int(day_pct * 100)
-        pct_str = f"{pct}%"
-        bbox = draw.textbbox((0, 0), pct_str, font=f_sm)
-        tw = bbox[2] - bbox[0]
-        draw.text((size - 28 - tw, 24), pct_str, fill=(*color, 240), font=f_sm)
+            font_num = font_lab = ImageFont.load_default()
 
-        # ماسک دایره‌ای
-        mask = Image.new("L", (size, size), 0)
-        md = ImageDraw.Draw(mask)
-        md.ellipse([4, 4, size - 5, size - 5], fill=255)
-        composed = Image.alpha_composite(base, overlay)
-        result = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        result.paste(composed, (0, 0), mask)
+        draw = ImageDraw.Draw(canvas)
+        r_tick = int(size * 0.395)
+        for i in range(12):
+            ang = math.radians(i * 30 - 90)
+            x1 = cx + (r_tick - 4) * math.cos(ang)
+            y1 = cy + (r_tick - 4) * math.sin(ang)
+            x2 = cx + (r_tick + 12) * math.cos(ang)
+            y2 = cy + (r_tick + 12) * math.sin(ang)
+            draw.line([(x1, y1), (x2, y2)], fill=(*color, 210), width=3)
+            num = str(i if i else 12)
+            nx = cx + (r_tick - 30) * math.cos(ang)
+            ny = cy + (r_tick - 30) * math.sin(ang)
+            bb = draw.textbbox((0, 0), num, font=font_num)
+            tw, th = bb[2] - bb[0], bb[3] - bb[1]
+            draw.text((nx - tw / 2, ny - th / 2), num, fill=(*color, 235), font=font_num)
+
+        h, m = now.hour % 12, now.minute
+        s = getattr(now, "second", 0) or 0
+        hour_a = math.radians((h + m / 60) * 30 - 90)
+        min_a = math.radians((m + s / 60) * 6 - 90)
+        hx = cx + r_tick * 0.40 * math.cos(hour_a)
+        hy = cy + r_tick * 0.40 * math.sin(hour_a)
+        mx = cx + r_tick * 0.70 * math.cos(min_a)
+        my = cy + r_tick * 0.70 * math.sin(min_a)
+        draw.line([(cx, cy), (hx, hy)], fill=(*color, 245), width=9)
+        draw.line([(cx, cy), (mx, my)], fill=(*color, 255), width=4)
+        draw.ellipse([mx - 7, my - 7, mx + 7, my + 7], fill=(*color, 255))
+        draw.ellipse([cx - 14, cy - 14, cx + 14, cy + 14], fill=(*color, 255))
+        draw.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], fill=(8, 12, 18, 255))
+
+        time_str = now.strftime("%H∶%M")
+        draw.text((30, 24), time_str, fill=(*color, 245), font=font_lab)
+        pct_str = f"{int(day_pct * 100)}%"
+        bb = draw.textbbox((0, 0), pct_str, font=font_lab)
+        draw.text((size - 30 - (bb[2] - bb[0]), 24), pct_str, fill=(*color, 245), font=font_lab)
 
         if not out_path:
-            out_path = os.path.join(tempfile.gettempdir(), f"pclock_{int(_t.time()*1000)}.png")
-        result.convert("RGB").save(out_path, "PNG", optimize=True)
+            out_path = os.path.join(tempfile.gettempdir(), f"pclock_{int(_t.time() * 1000)}.png")
+        canvas.convert("RGB").save(out_path, "PNG", optimize=True)
         return out_path
     except Exception as e:
         logger.error(f"compose_profile_clock: {e}\n{traceback.format_exc()}")
@@ -2951,6 +2977,30 @@ async def advanced_heart_animation(message):
     await message.edit("❤️ I Love You")
     await asyncio.sleep(3)
     await message.edit("❤️ I Love You <3")
+
+
+def find_ffmpeg_bin():
+    """پیدا کردن مسیر ffmpeg در محیط‌های مختلف (Railway/Docker/local)"""
+    import shutil
+    candidates = [
+        shutil.which("ffmpeg"),
+        "/usr/bin/ffmpeg",
+        "/usr/local/bin/ffmpeg",
+        "/bin/ffmpeg",
+        "/nix/var/nix/profiles/default/bin/ffmpeg",
+        os.environ.get("FFMPEG_PATH"),
+    ]
+    for p in candidates:
+        if p and os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+    try:
+        import imageio_ffmpeg
+        exe = imageio_ffmpeg.get_ffmpeg_exe()
+        if exe and os.path.isfile(exe):
+            return exe
+    except Exception:
+        pass
+    return None
 
 class SelfBotManager:
     def __init__(self, user_id):
@@ -6729,6 +6779,7 @@ class SelfBotManager:
             logger.error(f"restore_profile_clock: {e}")
             return False
 
+
     async def video_to_voice(self, event):
         """ریپلای روی ویدیو → استخراج صدا و ارسال ویس در همان چت"""
         try:
@@ -6773,10 +6824,22 @@ class SelfBotManager:
             vid_path = str(vid_path)
             ogg_path = vid_path + ".ogg"
             # چند تلاش ffmpeg
+            ff = find_ffmpeg_bin()
+            if not ff:
+                await event.edit(
+                    "❌ ffmpeg روی سرور نصب نیست.\n"
+                    "روی Railway/Docker: apt-get install -y ffmpeg\n"
+                    "یا متغیر FFMPEG_PATH را ست کنید."
+                )
+                try:
+                    os.remove(vid_path)
+                except Exception:
+                    pass
+                return
             cmds = [
-                ["ffmpeg", "-y", "-i", vid_path, "-vn", "-acodec", "libopus", "-b:a", "64k", "-ac", "1", "-ar", "48000", ogg_path],
-                ["ffmpeg", "-y", "-i", vid_path, "-vn", "-c:a", "libopus", "-b:a", "48k", ogg_path],
-                ["ffmpeg", "-y", "-i", vid_path, "-vn", "-acodec", "libopus", ogg_path],
+                [ff, "-y", "-i", vid_path, "-vn", "-acodec", "libopus", "-b:a", "64k", "-ac", "1", "-ar", "48000", ogg_path],
+                [ff, "-y", "-i", vid_path, "-vn", "-c:a", "libopus", "-b:a", "48k", ogg_path],
+                [ff, "-y", "-i", vid_path, "-vn", "-acodec", "libopus", ogg_path],
             ]
             ok = False
             last_err = ""
@@ -8603,7 +8666,7 @@ def get_main_panel_keyboard(user_id):
             InlineKeyboardButton("👹 دشمنان", callback_data=f"enemy_menu_{user_id}", style="danger")
         ],
         [
-            InlineKeyboardButton("🚫 فیلتر کلمات", callback_data=f"filter_menu_{user_id}", style="primary"),
+            InlineKeyboardButton("🚫 فیلتر کلمات", callback_data=f"exec_open_filter_{user_id}", style="primary"),
             InlineKeyboardButton("🛡 حفاظت اسپم", callback_data=f"protection_menu_{user_id}", style="primary"),
             InlineKeyboardButton("🤖 هوش مصنوعی", callback_data=f"ai_menu_{user_id}", style="primary")
         ],
@@ -8651,7 +8714,7 @@ def get_time_menu_keyboard(user_id):
             InlineKeyboardButton(f"🏳️ پرچم {'✓ روشن' if flag_enabled else 'خاموش'}", callback_data=f"exec_time_flag_{user_id}", style="success" if flag_enabled else "primary")
         ],
         [
-            InlineKeyboardButton(f"🕰 ساعت در پروفایل {'✓ روشن' if clock_on else 'خاموش'}", callback_data=f"pclock_menu_{user_id}", style="success" if clock_on else "primary"),
+            InlineKeyboardButton(f"🕰 ساعت در پروفایل {'✓ روشن' if clock_on else 'خاموش'}", callback_data=f"exec_open_pclock_{user_id}", style="success" if clock_on else "primary"),
         ],
         [
             InlineKeyboardButton("📅 تقویم", callback_data=f"exec_calendar_{user_id}", style="primary")
@@ -10195,7 +10258,7 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         'lock_', 'filter_', 'ai_', 'autosend_', 'self_on', 'self_off',
         'monshi_on', 'monshi_off', 'spam_protection_', 'bold', 'underline',
         'strike', 'quote', 'spoiler', 'italic', 'code', 'pre',
-        'translate_', 'style_', 'pclock_'
+        'translate_', 'style_', 'pclock_', 'open_filter', 'open_pclock'
     )
     _needs_temp_msg = not any(cmd.startswith(p) or cmd == p.rstrip('_') for p in _silent_prefixes)
     if _needs_temp_msg:
@@ -10211,6 +10274,39 @@ async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             except Exception:
                 pass
     
+    if cmd == 'open_filter':
+        try:
+            if msg:
+                await msg.delete()
+        except Exception:
+            pass
+        try:
+            await safe_edit_panel(query, "🚫 فیلتر کلمات", reply_markup=get_filter_menu_keyboard(user_id))
+        except Exception:
+            try:
+                await context.bot.send_message(chat_id=chat_id, text="🚫 فیلتر کلمات", reply_markup=get_filter_menu_keyboard(user_id))
+            except Exception as e:
+                logger.error(f"open_filter: {e}")
+                try:
+                    await query.answer(str(e)[:80], show_alert=True)
+                except Exception:
+                    pass
+        return
+    if cmd == 'open_pclock':
+        try:
+            if msg:
+                await msg.delete()
+        except Exception:
+            pass
+        try:
+            await safe_edit_panel(query, "🕰 ساعت در پروفایل", reply_markup=get_profile_clock_menu_keyboard(user_id))
+        except Exception:
+            try:
+                await context.bot.send_message(chat_id=chat_id, text="🕰 ساعت در پروفایل", reply_markup=get_profile_clock_menu_keyboard(user_id))
+            except Exception as e:
+                logger.error(f"open_pclock: {e}")
+        return
+
     bio_commands = {
         'bio_time1': 'ساعت_در_بیو',
         'bio_time2': 'ساعت_در_بیو_۲',
@@ -11110,6 +11206,17 @@ OCR روی عکس (ریپلای)
 › ✅ اتمام اسپم — خروج از حالت افزودن.
 › 📜 لیست اسپم — متن‌های اسپم ذخیره‌شده.
 › 🗑️ پاک کردن / حذف اسپم — مدیریت لیست اسپم.""",
+        'pclock_help': """📖 راهنمای ساعت روی پروفایل
+
+› روشن: بکاپ عکس فعلی + ساعت نئون روی عکس پروفایل
+› هر دقیقه عکس با دقیقهٔ جدید جایگزین می‌شود
+› خاموش: برگرداندن عکس قبلی
+› رنگ: فیروزه‌ای / سبز / بنفش / صورتی / نارنجی / قرمز / آبی / سفید
+
+دستورات:
+• ساعت روشن
+• ساعت خاموش
+• ساعت رنگ سبز""",
         'filter_help': """📖 راهنمای فیلتر کلمات
 
 › افزودن کلمه:
@@ -11181,6 +11288,7 @@ OCR روی عکس (ریپلای)
     HELP_BACK = {
         'google_help': f'google_menu_{user_id}',
         'time_help': f'time_menu_{user_id}',
+        'pclock_help': f'exec_open_pclock_{user_id}',
         'animation_help': f'animation_menu_{user_id}',
         'user_help': f'user_menu_{user_id}',
         'lock_help': f'lock_menu_{user_id}',
@@ -11197,7 +11305,7 @@ OCR روی عکس (ریپلای)
         'spam_help': f'spam_menu_{user_id}',
         'change_help': f'change_menu_{user_id}',
         'enemy_help': f'enemy_menu_{user_id}',
-        'filter_help': f'filter_menu_{user_id}',
+        'filter_help': f'exec_open_filter_{user_id}',
         'protection_help': f'protection_menu_{user_id}',
         'ai_help': f'ai_menu_{user_id}',
         'report_help': f'report_menu_{user_id}',
