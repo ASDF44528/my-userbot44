@@ -1,4 +1,3 @@
-
 import os
 import base64
 import sys
@@ -2775,6 +2774,7 @@ COMMAND_ROOTS = {
     'یادگیری', 'بکاپ', 'بکاب', 'اتمام', 'فال', 'اطلاعات', '.بن', '.انبن', 'بن', 'انبن', 'دارت', 'بسکتبال', 'فوتبال', '.بن', '.انبن', 'بن', 'انبن',
     'یوزرنیم',
     'یوزنیم', 'ایدی', 'آیدی', 'آیدی\u200cعددی', 'ایدی\u200cعددی', 'username', 'id',
+    'فیلتر', 'ویس', 'صدا', 'ویدیوبهویس', 'ویدیو_به_ویس',
 }
 
 def is_bot_command_text(text: str) -> bool:
@@ -2806,6 +2806,9 @@ def is_bot_command_text(text: str) -> bool:
         'اکشن فیلم', 'اکشن فایل', 'اکشن بازی', 'اکشن استیکر',
         'اکشن موقعیت', 'اکشن تماس', 'اکشن صحبت', 'اکشن خاموش', 'اکشن لیست',
         'نشستهای فعال', 'نشست های فعال', 'نشست‌های فعال',
+        'فیلتر روشن', 'فیلتر خاموش', 'فیلتر لیست', 'فیلتر حذف',
+        'ساعت روشن', 'ساعت خاموش', 'ساعت رنگ',
+        'ویدیو به ویس', 'ویدیو به صدا',
     )
     for m in multi_starts:
         if t == m or t.startswith(m + ' '):
@@ -4990,8 +4993,10 @@ class SelfBotManager:
                 await event.edit(f"✅ رنگ ساعت: {color}")
                 return
 
-        # ویدیو → ویس
-        if cmd in ('ویس', 'ویدیو_به_ویس', 'ویدیوبهویس', 'صدا') and (not args or (args and args[0] in ('کن', 'بساز', 'تبدیل'))):
+        # ویدیو → ویس (ریپلای روی ویدیو)
+        if cmd in ('ویس', 'ویدیو_به_ویس', 'ویدیوبهویس', 'صدا') or (
+            cmd == 'ویدیو' and args and args[0] in ('به',) and len(args) >= 2 and args[1] in ('ویس', 'صدا')
+        ):
             await self.video_to_voice(event)
             return
         
@@ -6724,50 +6729,77 @@ class SelfBotManager:
             return False
 
     async def video_to_voice(self, event):
-        """ریپلای روی ویدیو → استخراج صدا و ارسال به صورت ویس در همان چت"""
-        if not event.is_reply:
-            await event.edit("⚠️ روی یک ویدیو ریپلای کنید و بنویسید: ویس")
-            return
+        """ریپلای روی ویدیو → استخراج صدا و ارسال ویس در همان چت"""
         try:
+            if not event.is_reply:
+                await event.edit("⚠️ روی یک ویدیو ریپلای کنید و بنویسید:\n`ویس`")
+                return
             reply = await event.get_reply_message()
-            if not reply or not reply.media:
-                await event.edit("⚠️ پیام ریپلای‌شده مدیا ندارد")
+            if not reply:
+                await event.edit("⚠️ پیام ریپلای‌شده پیدا نشد")
                 return
-            # تشخیص ویدیو
-            is_video = bool(getattr(reply, 'video', None) or getattr(reply, 'video_note', None))
-            if not is_video and reply.document:
-                mime = getattr(reply.document, 'mime_type', '') or ''
-                if mime.startswith('video/'):
+            is_video = False
+            # انواع ویدیو
+            if getattr(reply, 'video', None) is not None:
+                is_video = True
+            elif getattr(reply, 'video_note', None) is not None:
+                is_video = True
+            elif getattr(reply, 'gif', None) is not None:
+                is_video = True
+            elif reply.document:
+                mime = (getattr(reply.document, 'mime_type', None) or '').lower()
+                if mime.startswith('video/') or mime in ('image/gif',):
                     is_video = True
+                # attribute video
+                for attr in (getattr(reply.document, 'attributes', None) or []):
+                    an = type(attr).__name__
+                    if 'Video' in an or 'Animated' in an:
+                        is_video = True
+                        break
+            if not is_video and reply.media:
+                # آخرین تلاش: هر مدیایی که دانلود شود و ffmpeg صدا بدهد
+                is_video = True
             if not is_video:
-                await event.edit("⚠️ لطفاً روی یک ویدیو ریپلای کنید")
+                await event.edit("⚠️ لطفاً روی یک ویدیو (یا گیف) ریپلای کنید")
                 return
-            await event.edit("⏳ در حال تبدیل ویدیو به ویس...")
+            await event.edit("⏳ در حال تبدیل به ویس...")
             os.makedirs(MEDIA_FOLDER, exist_ok=True)
-            vid_path = await self.client.download_media(reply, file=os.path.join(MEDIA_FOLDER, f"v2v_{self.user_id}_{event.id}"))
-            if not vid_path or not os.path.exists(vid_path):
+            base = os.path.join(MEDIA_FOLDER, f"v2v_{self.user_id}_{event.id}")
+            vid_path = await self.client.download_media(reply, file=base)
+            if not vid_path or not os.path.exists(str(vid_path)):
                 await event.edit("❌ دانلود ویدیو ناموفق")
                 return
+            vid_path = str(vid_path)
             ogg_path = vid_path + ".ogg"
-            # ffmpeg → opus voice
-            cmd = [
-                "ffmpeg", "-y", "-i", vid_path,
-                "-vn", "-acodec", "libopus", "-b:a", "64k", "-ac", "1",
-                ogg_path
+            # چند تلاش ffmpeg
+            cmds = [
+                ["ffmpeg", "-y", "-i", vid_path, "-vn", "-acodec", "libopus", "-b:a", "64k", "-ac", "1", "-ar", "48000", ogg_path],
+                ["ffmpeg", "-y", "-i", vid_path, "-vn", "-c:a", "libopus", "-b:a", "48k", ogg_path],
+                ["ffmpeg", "-y", "-i", vid_path, "-vn", "-acodec", "libopus", ogg_path],
             ]
-            proc = await asyncio.create_subprocess_exec(
-                *cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
-            )
-            await proc.wait()
-            if proc.returncode != 0 or not os.path.exists(ogg_path):
-                # fallback بدون libopus
-                cmd2 = ["ffmpeg", "-y", "-i", vid_path, "-vn", "-acodec", "libopus", "-b:a", "48k", ogg_path]
-                proc2 = await asyncio.create_subprocess_exec(
-                    *cmd2, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
-                )
-                await proc2.wait()
-            if not os.path.exists(ogg_path):
-                await event.edit("❌ استخراج صدا ناموفق (ffmpeg)")
+            ok = False
+            last_err = ""
+            for cmd in cmds:
+                try:
+                    proc = await asyncio.create_subprocess_exec(
+                        *cmd,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    _, stderr = await proc.communicate()
+                    if proc.returncode == 0 and os.path.exists(ogg_path) and os.path.getsize(ogg_path) > 100:
+                        ok = True
+                        break
+                    last_err = (stderr or b"").decode("utf-8", errors="ignore")[-200:]
+                    try:
+                        if os.path.exists(ogg_path):
+                            os.remove(ogg_path)
+                    except Exception:
+                        pass
+                except Exception as e:
+                    last_err = str(e)
+            if not ok:
+                await event.edit(f"❌ استخراج صدا ناموفق\n{last_err[:120]}")
                 try:
                     os.remove(vid_path)
                 except Exception:
@@ -6777,7 +6809,7 @@ class SelfBotManager:
                 event.chat_id,
                 ogg_path,
                 voice_note=True,
-                reply_to=reply.id
+                reply_to=reply.id,
             )
             try:
                 await event.delete()
@@ -6788,16 +6820,18 @@ class SelfBotManager:
                     pass
             for p in (vid_path, ogg_path):
                 try:
-                    os.remove(p)
+                    if p and os.path.exists(p):
+                        os.remove(p)
                 except Exception:
                     pass
         except Exception as e:
             logger.error(f"video_to_voice: {e}\n{traceback.format_exc()}")
             try:
-                await event.edit(f"❌ خطا: {str(e)[:80]}")
+                await event.edit(f"❌ خطا: {str(e)[:100]}")
             except Exception:
                 pass
-    
+
+
     async def update_profile_task(self):
         while self.running:
             try:
@@ -8467,12 +8501,16 @@ def get_help_back_keyboard(user_id, back_callback):
     ])
 
 async def safe_edit_panel(query, text, reply_markup=None, parse_mode=None):
-    """ویرایش پیام پنل — هم متن هم کپشن عکس؛ در نهایت فقط کیبورد را هم امتحان می‌کند"""
+    """ویرایش پیام پنل — هم متن هم کپشن عکس؛ در صورت شکست پیام جدید می‌فرستد"""
     kwargs = {}
     if reply_markup is not None:
         kwargs['reply_markup'] = reply_markup
     if parse_mode:
         kwargs['parse_mode'] = parse_mode
+    try:
+        await query.answer()
+    except Exception:
+        pass
     has_photo = False
     try:
         has_photo = bool(query.message and query.message.photo)
@@ -8480,14 +8518,20 @@ async def safe_edit_panel(query, text, reply_markup=None, parse_mode=None):
         pass
     if has_photo:
         try:
-            await query.edit_message_caption(caption=text or query.message.caption or " ", **kwargs)
+            await query.edit_message_caption(caption=(text or " ")[:1024], **kwargs)
             return True
         except Exception as e:
-            # اگر فقط کیبورد عوض شده، همین کافی است
             logger.debug(f"edit_caption: {e}")
             if reply_markup is not None:
                 try:
                     await query.edit_message_reply_markup(reply_markup=reply_markup)
+                    # اگر متن هم مهم است، پیام جدا بفرست
+                    if text and len(str(text)) > 2:
+                        try:
+                            chat_id = query.message.chat_id
+                            await query.get_bot().send_message(chat_id=chat_id, text=text, reply_markup=reply_markup, parse_mode=parse_mode)
+                        except Exception:
+                            pass
                     return True
                 except Exception as e2:
                     logger.debug(f"edit_markup after caption fail: {e2}")
@@ -8501,6 +8545,18 @@ async def safe_edit_panel(query, text, reply_markup=None, parse_mode=None):
                 return True
         except Exception as e2:
             logger.debug(f"safe_edit_panel: {e1} | {e2}")
+        # آخرین راه: پیام جدید
+        try:
+            chat_id = query.message.chat_id if query.message else query.from_user.id
+            await query.get_bot().send_message(
+                chat_id=chat_id,
+                text=text or "پنل",
+                reply_markup=reply_markup,
+                parse_mode=parse_mode
+            )
+            return True
+        except Exception as e3:
+            logger.debug(f"safe_edit send fallback: {e3}")
     return False
 
 async def refresh_panel_keyboard(query, user_id, menu_text, keyboard_func):
@@ -8634,7 +8690,7 @@ def get_profile_clock_menu_keyboard(user_id):
             InlineKeyboardButton(f"{'✓ ' if clock_on else ''}🕰 روشن", callback_data=f"exec_pclock_on_{user_id}", style="success" if clock_on else "primary"),
             InlineKeyboardButton(f"{'✓ ' if not clock_on else ''}🕰 خاموش", callback_data=f"exec_pclock_off_{user_id}", style="danger" if not clock_on else "primary"),
         ],
-        [InlineKeyboardButton("🎨 رنگ ساعت:", callback_data=f"exec_pclock_noop_{user_id}", style="secondary")],
+        [InlineKeyboardButton("🎨 رنگ ساعت:", callback_data=f"exec_pclock_noop_{user_id}", style="primary")],
     ]
     row = []
     for key, label in colors:
@@ -9998,7 +10054,26 @@ async def _button_callback_impl(update: Update, context: ContextTypes.DEFAULT_TY
         await safe_edit_panel(query, "› انتخاب پرچم", reply_markup=get_flag_menu_keyboard(user_id))
         return
     if data.startswith("pclock_menu_"):
-        await safe_edit_panel(query, "🕰 ساعت در پروفایل\nروشن/خاموش + انتخاب رنگ", reply_markup=get_profile_clock_menu_keyboard(user_id))
+        try:
+            await query.answer()
+        except Exception:
+            pass
+        try:
+            kb = get_profile_clock_menu_keyboard(user_id)
+        except Exception as e:
+            logger.error(f"pclock keyboard: {e}")
+            try:
+                await query.answer(f"خطا: {e}", show_alert=True)
+            except Exception:
+                pass
+            return
+        ok = await safe_edit_panel(query, "🕰 ساعت در پروفایل — روشن/خاموش و رنگ", reply_markup=kb)
+        if not ok:
+            try:
+                chat_id = query.message.chat_id if query.message else user_id
+                await context.bot.send_message(chat_id=chat_id, text="🕰 ساعت در پروفایل — روشن/خاموش و رنگ", reply_markup=kb)
+            except Exception as e:
+                logger.error(f"pclock send: {e}")
         return
     
     parts = data.split('_')
@@ -10027,6 +10102,7 @@ async def _button_callback_impl(update: Update, context: ContextTypes.DEFAULT_TY
             "change": ("✏️ تغییر پروفایل", get_change_menu_keyboard),
             "enemy": ("👹 دشمنان", get_enemy_menu_keyboard),
             "filter": ("🚫 فیلتر کلمات", get_filter_menu_keyboard),
+            "pclock": ("🕰 ساعت در پروفایل", get_profile_clock_menu_keyboard),
             "protection": ("🛡 حفاظت اسپم", get_protection_menu_keyboard),
             "ai": ("🤖 هوش مصنوعی", get_ai_menu_keyboard),
             "report": ("📣 گزارش", get_report_menu_keyboard),
@@ -10038,9 +10114,28 @@ async def _button_callback_impl(update: Update, context: ContextTypes.DEFAULT_TY
             "backup": ("📦 بکاپ‌گیری", get_backup_menu_keyboard),
         }
 
-        if action in menu_keyboards and parts[1] == "menu":
+        if action in menu_keyboards and len(parts) >= 2 and parts[1] == "menu":
             text, keyboard_func = menu_keyboards[action]
-            await safe_edit_panel(query, text, reply_markup=keyboard_func(user_id))
+            try:
+                await query.answer()
+            except Exception:
+                pass
+            try:
+                kb = keyboard_func(user_id)
+            except Exception as e:
+                logger.error(f"menu keyboard {action}: {e}")
+                try:
+                    await query.answer(f"خطا در منو: {e}", show_alert=True)
+                except Exception:
+                    pass
+                return
+            ok = await safe_edit_panel(query, text, reply_markup=kb)
+            if not ok:
+                try:
+                    chat_id = query.message.chat_id if query.message else user_id
+                    await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=kb)
+                except Exception as e:
+                    logger.error(f"menu send fallback {action}: {e}")
             return
 
 async def exec_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -11611,18 +11706,21 @@ OCR روی عکس (ریپلای)
     if cmd == 'video_to_voice':
         help_txt = (
             "🎙 ویدیو → ویس\n\n"
-            "روی یک ویدیو در چت سلف ریپلای کنید و بنویسید:\n"
-            "• `ویس`\n"
-            "• `صدا`\n"
-            "• `ویدیو به ویس`\n\n"
-            "صدا استخراج و به صورت ویس در همان چت ارسال می‌شود."
+            "۱) روی یک ویدیو در چت سلف ریپلای کنید\n"
+            "۲) بنویسید: ویس\n\n"
+            "دستورات:\n• ویس\n• صدا\n• ویدیو به ویس\n\n"
+            "صدا استخراج و به صورت ویس همان‌جا ارسال می‌شود."
         )
+        try:
+            if msg:
+                await msg.delete()
+        except Exception:
+            pass
         try:
             await safe_edit_panel(query, help_txt, reply_markup=get_tools_menu_keyboard(user_id))
         except Exception:
             try:
-                if msg:
-                    await msg.edit_text(help_txt)
+                await context.bot.send_message(chat_id=chat_id, text=help_txt, reply_markup=get_tools_menu_keyboard(user_id))
             except Exception:
                 pass
         return
